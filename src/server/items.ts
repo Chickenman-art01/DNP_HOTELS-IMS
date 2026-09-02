@@ -1,38 +1,64 @@
 /**
- * DNP HOTELS - Product Master, Catalog & Dashboard Metrics
+ * DNP HOTELS - Pure Sheet-Driven Product Master & Metrics
+ * All calculations and listings are read 100% strictly from Google Sheets
  */
 
 function getItemsInternal(ss) {
-  const sheet = ss.getSheetByName('Product_Master');
+  const sheet = ss.getSheetByName('Product_Master') || ss.getSheets()[0];
   if (!sheet) return [];
 
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const codeIdx = headers.findIndex(h => h.includes('item code') || h.includes('code') || h.includes('sku'));
+  const descIdx = headers.findIndex(h => h.includes('description') || h.includes('name') || h.includes('item'));
+  const catIdx = headers.findIndex(h => h === 'category' || (h.includes('category') && !h.includes('code')));
+  const catCodeIdx = headers.findIndex(h => h.includes('category code'));
+  const uomIdx = headers.findIndex(h => h.includes('uom') || h.includes('unit'));
+  const rateIdx = headers.findIndex(h => h.includes('rate') || h.includes('price') || h.includes('cost'));
+  const taxIdx = headers.findIndex(h => h.includes('tax'));
+  const minIdx = headers.findIndex(h => h.includes('min'));
+  const s001Idx = headers.findIndex(h => h.includes('s_001') || h.includes('sec 29') || h.includes('deneb'));
+  const s002Idx = headers.findIndex(h => h.includes('s_002') || h.includes('sec 27') || h.includes('pollux'));
+  const centralIdx = headers.findIndex(h => h.includes('central') || h.includes('depot'));
+  const totalStockIdx = headers.findIndex(h => h.includes('total stock') || h.includes('current stock') || h.includes('stock'));
+  const supIdx = headers.findIndex(h => h.includes('supplier'));
+  const statusIdx = headers.findIndex(h => h.includes('status'));
+
   const items = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[0] && !row[1]) continue;
+    const code = codeIdx !== -1 ? String(row[codeIdx] || '').trim() : String(row[0] || '').trim();
+    const desc = descIdx !== -1 ? String(row[descIdx] || '').trim() : String(row[1] || '').trim();
+    if (!code && !desc) continue;
 
-    const rate = Number(row[5]) || 0;
-    const tax = Number(row[6]) || 0;
-    const minStock = Number(row[7]) || 0;
-    const stockS001 = Number(row[8]) || 0;
-    const stockS002 = Number(row[9]) || 0;
-    const centralStock = Number(row[10]) || 0;
-    const totalStock = stockS001 + stockS002 + centralStock;
+    const rate = rateIdx !== -1 ? Number(row[rateIdx]) || 0 : 0;
+    const tax = taxIdx !== -1 ? Number(row[taxIdx]) || 0 : 0;
+    const minStock = minIdx !== -1 ? Number(row[minIdx]) || 0 : 0;
+    const stockS001 = s001Idx !== -1 ? Number(row[s001Idx]) || 0 : 0;
+    const stockS002 = s002Idx !== -1 ? Number(row[s002Idx]) || 0 : 0;
+    const centralStock = centralIdx !== -1 ? Number(row[centralIdx]) || 0 : 0;
+
+    let totalStock = 0;
+    if (s001Idx !== -1 || s002Idx !== -1 || centralIdx !== -1) {
+      totalStock = stockS001 + stockS002 + centralStock;
+    } else if (totalStockIdx !== -1) {
+      totalStock = Number(row[totalStockIdx]) || 0;
+    }
+
     const totalValue = totalStock * rate;
 
     items.push({
-      id: String(row[0]),
-      code: String(row[0]),
-      sku: String(row[0]),
-      name: String(row[1]),
-      description: String(row[1]),
-      category: String(row[2]),
-      categoryCode: String(row[3] || ''),
-      unit: String(row[4] || 'Pcs'),
-      uom: String(row[4] || 'Pcs'),
+      id: code,
+      code: code,
+      sku: code,
+      name: desc,
+      description: desc,
+      category: catIdx !== -1 ? String(row[catIdx] || 'General') : 'General',
+      categoryCode: catCodeIdx !== -1 ? String(row[catCodeIdx] || '') : '',
+      unit: uomIdx !== -1 ? String(row[uomIdx] || 'Pcs') : 'Pcs',
+      uom: uomIdx !== -1 ? String(row[uomIdx] || 'Pcs') : 'Pcs',
       rate: rate,
       unitCost: rate,
       taxPercent: tax,
@@ -42,10 +68,9 @@ function getItemsInternal(ss) {
       centralStock: centralStock,
       totalStock: totalStock,
       totalValue: totalValue,
-      supplierCode: String(row[13] || ''),
-      supplier: String(row[13] || ''),
-      status: String(row[14] || 'Active'),
-      lastUpdated: row[15] ? new Date(row[15]).toISOString() : ''
+      supplierCode: supIdx !== -1 ? String(row[supIdx] || '') : '',
+      supplier: supIdx !== -1 ? String(row[supIdx] || '') : '',
+      status: statusIdx !== -1 ? String(row[statusIdx] || 'Active') : 'Active'
     });
   }
   return items;
@@ -58,14 +83,14 @@ function getItems() {
 
 function saveItem(itemData) {
   const ss = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
-  const sheet = ss.getSheetByName('Product_Master');
+  const sheet = ss.getSheetByName('Product_Master') || ss.getSheets()[0];
   if (!sheet) throw new Error('Product_Master sheet missing');
 
   const data = sheet.getDataRange().getValues();
   let itemCode = itemData.code || itemData.sku || itemData.id ? String(itemData.code || itemData.sku || itemData.id).trim().toUpperCase() : '';
   let targetRow = -1;
 
-  if (itemCode) {
+  if (itemCode && data.length > 1) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).toUpperCase() === itemCode) {
         targetRow = i + 1;
@@ -132,7 +157,7 @@ function saveItem(itemData) {
 
 function deleteItem(itemCode) {
   const ss = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
-  const sheet = ss.getSheetByName('Product_Master');
+  const sheet = ss.getSheetByName('Product_Master') || ss.getSheets()[0];
   if (!sheet) throw new Error('Product_Master sheet missing');
 
   const data = sheet.getDataRange().getValues();
@@ -142,25 +167,29 @@ function deleteItem(itemCode) {
       return { success: true };
     }
   }
-  return { success: false, error: 'Item not found' };
+  return { success: false, error: 'Item not found in sheet' };
 }
 
-function calculateDashboardMetrics(items, supplierTxns, issuanceTxns) {
+function calculateDashboardMetrics(items, supplierTxns, issuanceTxns, storesList) {
   let totalValuation = 0;
   let totalUnits = 0;
   let totalSkus = items.length;
   let lowStockCount = 0;
   let outOfStockCount = 0;
 
-  let s001Units = 0;
-  let s001Valuation = 0;
-  let s002Units = 0;
-  let s002Valuation = 0;
-  let centralUnits = 0;
-  let centralValuation = 0;
-
   const categoryMap = {};
   const lowStockItems = [];
+
+  // Initialize store units and valuation purely from the registered stores
+  const storeMetrics = {};
+  (storesList || []).forEach(st => {
+    storeMetrics[st.code] = {
+      code: st.code,
+      name: st.name,
+      units: 0,
+      valuation: 0
+    };
+  });
 
   items.forEach(item => {
     const total = Number(item.totalStock) || 0;
@@ -171,14 +200,19 @@ function calculateDashboardMetrics(items, supplierTxns, issuanceTxns) {
     totalUnits += total;
     totalValuation += itemVal;
 
-    s001Units += Number(item.stockS001) || 0;
-    s001Valuation += (Number(item.stockS001) || 0) * rate;
-
-    s002Units += Number(item.stockS002) || 0;
-    s002Valuation += (Number(item.stockS002) || 0) * rate;
-
-    centralUnits += Number(item.centralStock) || 0;
-    centralValuation += (Number(item.centralStock) || 0) * rate;
+    // Distribute to registered stores if matching codes exist
+    if (storeMetrics['S_001'] && item.stockS001) {
+      storeMetrics['S_001'].units += item.stockS001;
+      storeMetrics['S_001'].valuation += item.stockS001 * rate;
+    }
+    if (storeMetrics['S_002'] && item.stockS002) {
+      storeMetrics['S_002'].units += item.stockS002;
+      storeMetrics['S_002'].valuation += item.stockS002 * rate;
+    }
+    if (storeMetrics['S_000'] && item.centralStock) {
+      storeMetrics['S_000'].units += item.centralStock;
+      storeMetrics['S_000'].valuation += item.centralStock * rate;
+    }
 
     if (total === 0) {
       outOfStockCount++;
@@ -223,13 +257,9 @@ function calculateDashboardMetrics(items, supplierTxns, issuanceTxns) {
     totalUnits: totalUnits,
     lowStockCount: lowStockCount,
     outOfStockCount: outOfStockCount,
-    stores: {
-      s001: { name: '21 GUN SOLUTE GGN SEC 29', code: 'S_001', units: s001Units, valuation: Math.round(s001Valuation) },
-      s002: { name: 'PAHLE CHAI GGN Sec 27', code: 'S_002', units: s002Units, valuation: Math.round(s002Valuation) },
-      central: { name: 'Central Depot Warehouse', code: 'S_000', units: centralUnits, valuation: Math.round(centralValuation) }
-    },
+    stores: storeMetrics,
     categoryBreakdown: categoryMap,
-    lowStockItems: lowStockItems.slice(0, 10),
+    lowStockItems: lowStockItems.slice(0, 15),
     todaySummary: {
       txnCount: supplierTxns.length + issuanceTxns.length,
       stockIn: todayPurchases,
@@ -241,7 +271,6 @@ function calculateDashboardMetrics(items, supplierTxns, issuanceTxns) {
 }
 
 function getInitialData() {
-  // Ensure all 6 workbooks are initialized
   initAllWorkbooks();
 
   const workbooksInfo = getWorkbooksInfo();
@@ -254,7 +283,7 @@ function getInitialData() {
   const settings = getSettings();
   const supplierTxns = getSupplierTransactions(50);
   const issuanceTxns = getIssuanceTransactions(50);
-  const metrics = calculateDashboardMetrics(items, supplierTxns, issuanceTxns);
+  const metrics = calculateDashboardMetrics(items, supplierTxns, issuanceTxns, stores);
 
   return {
     success: true,

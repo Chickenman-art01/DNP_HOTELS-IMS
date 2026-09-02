@@ -1,32 +1,44 @@
 /**
- * DNP HOTELS - Supplier Master & Location Master Handlers
+ * DNP HOTELS - Pure Google Sheets Master Data Handler
+ * Reads and writes 100% strictly from Google Sheets in Drive folder
  */
 
 // ==========================================
-// 1. SUPPLIERS (Supplier_Master Workbook)
+// 1. SUPPLIER MASTER (Supplier_Master Workbook)
 // ==========================================
 function getSuppliers() {
   const ss = getWorkbook(WORKBOOKS.SUPPLIER_MASTER);
-  const sheet = ss.getSheetByName('Supplier_Master');
+  const sheet = ss.getSheetByName('Supplier_Master') || ss.getSheets()[0];
   if (!sheet) return [];
 
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const codeIdx = headers.findIndex(h => h.includes('code') || h.includes('id'));
+  const nameIdx = headers.findIndex(h => h.includes('name') || h.includes('supplier'));
+  const catIdx = headers.findIndex(h => h.includes('category'));
+  const contactIdx = headers.findIndex(h => h.includes('contact') || h.includes('person'));
+  const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile'));
+  const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('mail'));
+  const statusIdx = headers.findIndex(h => h.includes('status'));
+
   const suppliers = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[0] && !row[1]) continue;
+    const name = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : String(row[0] || '').trim();
+    const code = codeIdx !== -1 ? String(row[codeIdx] || '').trim() : String(row[1] || '').trim();
+    if (!name && !code) continue;
 
     suppliers.push({
-      id: String(row[0]), // e.g. SUP_001
-      code: String(row[0]),
-      name: String(row[1]),
-      category: String(row[2] || 'General'),
-      contactPerson: String(row[3] || ''),
-      phone: String(row[4] || ''),
-      email: String(row[5] || ''),
-      status: String(row[6] || 'Active')
+      id: code || ('SUP_' + String(i).padStart(3, '0')),
+      code: code || ('SUP_' + String(i).padStart(3, '0')),
+      name: name,
+      category: catIdx !== -1 ? String(row[catIdx] || 'General') : 'General',
+      contactPerson: contactIdx !== -1 ? String(row[contactIdx] || '') : '',
+      phone: phoneIdx !== -1 ? String(row[phoneIdx] || '') : '',
+      email: emailIdx !== -1 ? String(row[emailIdx] || '') : '',
+      status: statusIdx !== -1 ? String(row[statusIdx] || 'Active') : 'Active'
     });
   }
   return suppliers;
@@ -34,16 +46,20 @@ function getSuppliers() {
 
 function saveSupplier(supData) {
   const ss = getWorkbook(WORKBOOKS.SUPPLIER_MASTER);
-  const sheet = ss.getSheetByName('Supplier_Master');
+  const sheet = ss.getSheetByName('Supplier_Master') || ss.getSheets()[0];
   if (!sheet) throw new Error('Supplier_Master sheet not found');
 
   const data = sheet.getDataRange().getValues();
   let supCode = supData.code || supData.id ? String(supData.code || supData.id).trim() : '';
   let targetRow = -1;
 
-  if (supCode) {
+  if (supCode && data.length > 1) {
+    const headers = data[0].map(h => String(h).trim().toLowerCase());
+    const codeIdx = headers.findIndex(h => h.includes('code') || h.includes('id'));
+    const searchCol = codeIdx !== -1 ? codeIdx : 1;
+
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).toUpperCase() === supCode.toUpperCase()) {
+      if (String(data[i][searchCol]).toUpperCase() === supCode.toUpperCase()) {
         targetRow = i + 1;
         break;
       }
@@ -52,8 +68,8 @@ function saveSupplier(supData) {
 
   if (targetRow > 1) {
     sheet.getRange(targetRow, 1, 1, 7).setValues([[
-      supCode,
       supData.name,
+      supCode,
       supData.category || 'General',
       supData.contactPerson || '',
       supData.phone || '',
@@ -65,8 +81,8 @@ function saveSupplier(supData) {
       supCode = 'SUP_' + String(data.length).padStart(3, '0');
     }
     sheet.appendRow([
-      supCode,
       supData.name,
+      supCode,
       supData.category || 'General',
       supData.contactPerson || '',
       supData.phone || '',
@@ -80,40 +96,48 @@ function saveSupplier(supData) {
 
 function deleteSupplier(supCode) {
   const ss = getWorkbook(WORKBOOKS.SUPPLIER_MASTER);
-  const sheet = ss.getSheetByName('Supplier_Master');
+  const sheet = ss.getSheetByName('Supplier_Master') || ss.getSheets()[0];
   if (!sheet) throw new Error('Supplier_Master sheet not found');
 
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(supCode)) {
+    if (String(data[i][0]).toUpperCase() === String(supCode).toUpperCase() || 
+        String(data[i][1]).toUpperCase() === String(supCode).toUpperCase()) {
       sheet.deleteRow(i + 1);
       return { success: true };
     }
   }
-  return { success: false, error: 'Supplier not found' };
+  return { success: false, error: 'Supplier not found in sheet' };
 }
 
 // ==========================================
-// 2. LOCATIONS: STORES & SELLING POINTS (Location_Master Workbook)
+// 2. LOCATION MASTER (Store & Selling_Point)
 // ==========================================
 function getStores() {
   const ss = getWorkbook(WORKBOOKS.LOCATION_MASTER);
-  const sheet = ss.getSheetByName('Store');
+  const sheet = ss.getSheetByName('Store') || ss.getSheets()[0];
   if (!sheet) return [];
 
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const nameIdx = headers.findIndex(h => h.includes('name'));
+  const codeIdx = headers.findIndex(h => h.includes('code'));
+  const statusIdx = headers.findIndex(h => h.includes('status'));
+
   const stores = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[0] && !row[1]) continue;
+    const name = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : String(row[0] || '').trim();
+    const code = codeIdx !== -1 ? String(row[codeIdx] || '').trim() : String(row[1] || '').trim();
+    if (!name && !code) continue;
+
     stores.push({
-      code: String(row[0]),
-      name: String(row[1]),
-      type: String(row[2] || 'Store'),
-      status: String(row[3] || 'Active'),
-      description: String(row[4] || '')
+      code: code || ('S_' + String(i).padStart(3, '0')),
+      name: name || code,
+      type: 'Store',
+      status: statusIdx !== -1 ? String(row[statusIdx] || 'Active') : 'Active'
     });
   }
   return stores;
@@ -121,16 +145,16 @@ function getStores() {
 
 function saveStore(storeData) {
   const ss = getWorkbook(WORKBOOKS.LOCATION_MASTER);
-  const sheet = ss.getSheetByName('Store');
-  if (!sheet) throw new Error('Store sheet missing in Location_Master');
+  let sheet = ss.getSheetByName('Store');
+  if (!sheet) sheet = ss.insertSheet('Store');
 
   const data = sheet.getDataRange().getValues();
   let code = storeData.code ? String(storeData.code).trim() : '';
   let targetRow = -1;
 
-  if (code) {
+  if (code && data.length > 1) {
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).toUpperCase() === code.toUpperCase()) {
+      if (String(data[i][1]).toUpperCase() === code.toUpperCase() || String(data[i][0]).toUpperCase() === code.toUpperCase()) {
         targetRow = i + 1;
         break;
       }
@@ -138,24 +162,20 @@ function saveStore(storeData) {
   }
 
   if (targetRow > 1) {
-    sheet.getRange(targetRow, 1, 1, 5).setValues([[
-      code,
+    sheet.getRange(targetRow, 1, 1, 3).setValues([[
       storeData.name,
-      storeData.type || 'Store',
-      storeData.status || 'Active',
-      storeData.description || ''
+      code,
+      storeData.status || 'Active'
     ]]);
   } else {
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['Store Name', 'Store Code', 'Status']);
+      formatHeaderRow(sheet, 3);
+    }
     if (!code) {
       code = 'S_' + String(data.length).padStart(3, '0');
     }
-    sheet.appendRow([
-      code,
-      storeData.name,
-      storeData.type || 'Store',
-      storeData.status || 'Active',
-      storeData.description || ''
-    ]);
+    sheet.appendRow([storeData.name, code, storeData.status || 'Active']);
   }
   return { success: true, code: code };
 }
@@ -168,16 +188,24 @@ function getSellingPoints() {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const nameIdx = headers.findIndex(h => h.includes('name'));
+  const codeIdx = headers.findIndex(h => h.includes('code'));
+  const storeIdx = headers.findIndex(h => h.includes('store'));
+
   const sps = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[0] && !row[1]) continue;
+    const name = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : String(row[0] || '').trim();
+    const code = codeIdx !== -1 ? String(row[codeIdx] || '').trim() : String(row[1] || '').trim();
+    if (!name && !code) continue;
+
     sps.push({
-      code: String(row[0]),
-      name: String(row[1]),
-      storeCode: String(row[2] || 'S_001'),
-      type: String(row[3] || 'Counter'),
-      status: String(row[4] || 'Active')
+      code: code || ('SP_' + String(i).padStart(3, '0')),
+      name: name || code,
+      storeCode: storeIdx !== -1 ? String(row[storeIdx] || 'S_001') : 'S_001',
+      type: 'Selling Point',
+      status: 'Active'
     });
   }
   return sps;
@@ -185,16 +213,16 @@ function getSellingPoints() {
 
 function saveSellingPoint(spData) {
   const ss = getWorkbook(WORKBOOKS.LOCATION_MASTER);
-  const sheet = ss.getSheetByName('Selling_Point');
-  if (!sheet) throw new Error('Selling_Point sheet missing in Location_Master');
+  let sheet = ss.getSheetByName('Selling_Point');
+  if (!sheet) sheet = ss.insertSheet('Selling_Point');
 
   const data = sheet.getDataRange().getValues();
   let code = spData.code ? String(spData.code).trim() : '';
   let targetRow = -1;
 
-  if (code) {
+  if (code && data.length > 1) {
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).toUpperCase() === code.toUpperCase()) {
+      if (String(data[i][1]).toUpperCase() === code.toUpperCase() || String(data[i][0]).toUpperCase() === code.toUpperCase()) {
         targetRow = i + 1;
         break;
       }
@@ -202,24 +230,20 @@ function saveSellingPoint(spData) {
   }
 
   if (targetRow > 1) {
-    sheet.getRange(targetRow, 1, 1, 5).setValues([[
-      code,
+    sheet.getRange(targetRow, 1, 1, 3).setValues([[
       spData.name,
-      spData.storeCode || 'S_001',
-      spData.type || 'Counter',
+      code,
       spData.status || 'Active'
     ]]);
   } else {
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['Selling Point Name', 'Selling Point Code', 'Status']);
+      formatHeaderRow(sheet, 3);
+    }
     if (!code) {
       code = 'SP_' + String(data.length).padStart(3, '0');
     }
-    sheet.appendRow([
-      code,
-      spData.name,
-      spData.storeCode || 'S_001',
-      spData.type || 'Counter',
-      spData.status || 'Active'
-    ]);
+    sheet.appendRow([spData.name, code, spData.status || 'Active']);
   }
   return { success: true, code: code };
 }
@@ -235,17 +259,25 @@ function getUsers() {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const idIdx = headers.findIndex(h => h.includes('id') || h.includes('code'));
+  const nameIdx = headers.findIndex(h => h.includes('name'));
+  const roleIdx = headers.findIndex(h => h.includes('role'));
+  const emailIdx = headers.findIndex(h => h.includes('email'));
+  const statusIdx = headers.findIndex(h => h.includes('status'));
+
   const users = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[0] && !row[1]) continue;
+    const name = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : String(row[1] || '').trim();
+    if (!name) continue;
+
     users.push({
-      id: String(row[0]),
-      name: String(row[1]),
-      role: String(row[2] || 'Staff'),
-      email: String(row[3] || ''),
-      assignedStore: String(row[4] || 'ALL'),
-      status: String(row[5] || 'Active')
+      id: idIdx !== -1 ? String(row[idIdx] || '') : ('USR_' + String(i).padStart(3, '0')),
+      name: name,
+      role: roleIdx !== -1 ? String(row[roleIdx] || 'Staff') : 'Staff',
+      email: emailIdx !== -1 ? String(row[emailIdx] || '') : '',
+      status: statusIdx !== -1 ? String(row[statusIdx] || 'Active') : 'Active'
     });
   }
   return users;

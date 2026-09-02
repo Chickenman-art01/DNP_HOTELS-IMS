@@ -126,7 +126,7 @@
     <div class="px-xl mb-8 flex items-center gap-sm cursor-pointer" onclick="app.switchTab('dashboard')">
       <span class="material-symbols-outlined text-primary text-[28px]">inventory_2</span>
       <div>
-        <span class="font-display-lg text-headline-md tracking-tight text-on-surface block leading-tight">DNP Hotels</span>
+        <span id="sidebarHotelName" class="font-display-lg text-headline-md tracking-tight text-on-surface block leading-tight">DNP Hotels</span>
         <span class="font-label-caps text-label-caps text-on-surface-variant tracking-wider uppercase">Procurement &amp; IMS</span>
       </div>
     </div>
@@ -241,8 +241,8 @@
         <!-- User Profile -->
         <div class="flex items-center gap-md pl-md border-l border-outline-variant/20">
           <div class="text-right hidden sm:block">
-            <div class="font-body-md font-semibold text-on-surface leading-none">Alsha Khan</div>
-            <div class="font-body-sm text-on-surface-variant">Logistics Manager</div>
+            <div id="headerUserName" class="font-body-md font-semibold text-on-surface leading-none">--</div>
+            <div id="headerUserRole" class="font-body-sm text-on-surface-variant">--</div>
           </div>
           <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center cursor-pointer shadow">
             <span class="material-symbols-outlined text-on-primary text-[20px]">person</span>
@@ -268,7 +268,7 @@
             <p class="font-body-sm text-on-surface-variant">Real-time hospitality inventory, inter-property distribution, and requisition tracking</p>
           </div>
           <div class="flex items-center gap-md">
-            <span id="liveTimestamp" class="font-data-tabular text-data-tabular text-on-surface-variant">Oct 26, 2023 | 10:35 AM</span>
+            <span id="liveTimestamp" class="font-data-tabular text-data-tabular text-on-surface-variant">--</span>
             <button onclick="app.loadInitialData(true)" title="Refresh data from Google Sheets" class="p-1 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition">
               <span id="dashRefreshIcon" class="material-symbols-outlined text-[18px]">refresh</span>
             </button>
@@ -285,10 +285,10 @@
                 <span class="material-symbols-outlined text-[20px]">category</span>
               </div>
             </div>
-            <div id="dashTotalSkus" class="font-display-lg text-[32px] font-bold text-on-surface tracking-tight">1,480</div>
+            <div id="dashTotalSkus" class="font-display-lg text-[32px] font-bold text-on-surface tracking-tight">--</div>
             <div class="flex items-center gap-xs text-secondary">
               <span class="material-symbols-outlined text-[16px]">trending_up</span>
-              <span id="dashTotalUnits" class="font-data-tabular text-data-tabular">3,233 units total</span>
+              <span id="dashTotalUnits" class="font-data-tabular text-data-tabular">-- units total</span>
             </div>
           </div>
 
@@ -300,7 +300,7 @@
                 <span class="material-symbols-outlined text-[20px]">warning</span>
               </div>
             </div>
-            <div id="dashLowStockCount" class="font-display-lg text-[32px] font-bold text-tertiary tracking-tight">42</div>
+            <div id="dashLowStockCount" class="font-display-lg text-[32px] font-bold text-tertiary tracking-tight">--</div>
             <div class="flex items-center gap-xs text-tertiary">
               <span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
               <span class="font-data-tabular text-data-tabular">Attention Required</span>
@@ -315,7 +315,7 @@
                 <span class="material-symbols-outlined text-[20px]">receipt_long</span>
               </div>
             </div>
-            <div id="dashTodayTxns" class="font-display-lg text-[32px] font-bold text-on-surface tracking-tight">118</div>
+            <div id="dashTodayTxns" class="font-display-lg text-[32px] font-bold text-on-surface tracking-tight">--</div>
             <div class="flex items-center gap-xs text-secondary">
               <span id="dashStockInToday" class="font-data-tabular text-data-tabular">+0 In</span>
               <span class="text-outline-variant">•</span>
@@ -331,7 +331,7 @@
                 <span class="material-symbols-outlined text-[20px]">payments</span>
               </div>
             </div>
-            <div id="dashTotalValuation" class="font-display-lg text-[32px] font-bold text-on-surface tracking-tight">₹ 34,890</div>
+            <div id="dashTotalValuation" class="font-display-lg text-[32px] font-bold text-on-surface tracking-tight">--</div>
             <div class="flex items-center gap-xs text-secondary">
               <span class="material-symbols-outlined text-[16px]">trending_up</span>
               <span class="font-data-tabular text-data-tabular">Multi-Store Consolidated</span>
@@ -681,7 +681,7 @@
             <div class="space-y-md flex-1 flex flex-col justify-center">
               <div class="p-md bg-surface-container-high rounded-xl border border-outline-variant/10">
                 <div class="flex justify-between items-center">
-                  <span class="font-body-md text-primary font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">warehouse</span> Central Warehouse (Depot)</span>
+                  <span class="font-body-md text-primary font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">warehouse</span> Central Depot Warehouse</span>
                   <span id="repValCentral" class="font-data-tabular text-data-tabular font-bold text-on-surface">--</span>
                 </div>
                 <div class="text-xs text-on-surface-variant mt-1" id="repUnitsCentral">-- units</div>
@@ -689,7 +689,7 @@
 
               <div class="p-md bg-surface-container-high rounded-xl border border-outline-variant/10">
                 <div class="flex justify-between items-center">
-                  <span class="font-body-md text-secondary font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">hotel</span> Deneb Hotel Store</span>
+                  <span class="font-body-md text-secondary font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">storefront</span> 21 GUN SOLUTE GGN SEC 29</span>
                   <span id="repValDeneb" class="font-data-tabular text-data-tabular font-bold text-on-surface">--</span>
                 </div>
                 <div class="text-xs text-on-surface-variant mt-1" id="repUnitsDeneb">-- units</div>
@@ -697,7 +697,7 @@
 
               <div class="p-md bg-surface-container-high rounded-xl border border-outline-variant/10">
                 <div class="flex justify-between items-center">
-                  <span class="font-body-md text-tertiary font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">hotel</span> Pollux Hotel Store</span>
+                  <span class="font-body-md text-tertiary font-semibold flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">local_cafe</span> PAHLE CHAI GGN Sec 27</span>
                   <span id="repValPollux" class="font-data-tabular text-data-tabular font-bold text-on-surface">--</span>
                 </div>
                 <div class="text-xs text-on-surface-variant mt-1" id="repUnitsPollux">-- units</div>
@@ -871,11 +871,11 @@
               <input type="number" id="itemCentralStock" min="0" value="0" class="w-full px-2 py-1.5 bg-surface-container border border-outline-variant/20 rounded-lg text-center font-bold text-on-surface">
             </div>
             <div>
-              <span class="text-secondary text-[11px] block font-medium">Deneb Hotel:</span>
+              <span class="text-secondary text-[11px] block font-medium">21 Gun Sec 29:</span>
               <input type="number" id="itemDenebStock" min="0" value="0" class="w-full px-2 py-1.5 bg-surface-container border border-outline-variant/20 rounded-lg text-center font-bold text-on-surface">
             </div>
             <div>
-              <span class="text-tertiary text-[11px] block font-medium">Pollux Hotel:</span>
+              <span class="text-tertiary text-[11px] block font-medium">Pahle Chai Sec 27:</span>
               <input type="number" id="itemPolluxStock" min="0" value="0" class="w-full px-2 py-1.5 bg-surface-container border border-outline-variant/20 rounded-lg text-center font-bold text-on-surface">
             </div>
           </div>
@@ -885,7 +885,6 @@
           <div>
             <label class="block font-bold text-on-surface mb-1">Primary Supplier:</label>
             <select id="itemSupplier" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
-              <option value="">-- Direct Supplier --</option>
             </select>
           </div>
           <div>
@@ -921,11 +920,7 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block font-bold text-on-surface mb-1">Receiving Store *:</label>
-            <select id="stockInDest" required class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold">
-              <option value="Central Warehouse">Central Warehouse (Depot)</option>
-              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
-              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
-            </select>
+            <select id="stockInDest" required class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold"></select>
           </div>
           <div>
             <label class="block font-bold text-on-surface mb-1">Quantity Received *:</label>
@@ -938,25 +933,27 @@
             <input type="number" id="stockInUnitPrice" step="0.01" min="0" placeholder="e.g. 450" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
           </div>
           <div>
-            <label class="block font-bold text-on-surface mb-1">Invoice / PO Reference:</label>
-            <input type="text" id="stockInRef" placeholder="e.g. PO-2026-99" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
+            <label class="block font-bold text-on-surface mb-1">Supplier *:</label>
+            <select id="stockInSupplier" required class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface"></select>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block font-bold text-on-surface mb-1">Supplier / Vendor:</label>
-            <select id="stockInSupplier" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
-              <option value="">-- Direct Supplier --</option>
-            </select>
+            <label class="block font-bold text-on-surface mb-1">PO / Invoice #:</label>
+            <input type="text" id="stockInRef" placeholder="e.g. INV-904" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
           </div>
           <div>
-            <label class="block font-bold text-on-surface mb-1">Received By (Staff):</label>
-            <input type="text" id="stockInStaff" placeholder="Staff Name" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
+            <label class="block font-bold text-on-surface mb-1">Received By:</label>
+            <input type="text" id="stockInStaff" placeholder="e.g. Store Incharge" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
           </div>
+        </div>
+        <div>
+          <label class="block font-bold text-on-surface mb-1">Notes / Batch Info:</label>
+          <input type="text" id="stockInNotes" placeholder="Delivery notes..." class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
         </div>
         <div class="flex items-center justify-end gap-3 pt-3 border-t border-outline-variant/10">
           <button type="button" onclick="app.closeModal('stockInModal')" class="px-4 py-2 border border-outline-variant/20 rounded-lg text-on-surface-variant hover:bg-surface-container-high">Cancel</button>
-          <button type="submit" class="px-5 py-2 bg-secondary-container text-on-secondary-container font-bold rounded-lg shadow">Record Stock In</button>
+          <button type="submit" class="px-5 py-2 bg-secondary-container text-on-secondary-container font-bold rounded-lg shadow">Confirm Stock In</button>
         </div>
       </form>
     </div>
@@ -969,7 +966,7 @@
       <div class="bg-surface-container-high px-6 py-4 flex items-center justify-between border-b border-outline-variant/10">
         <h3 class="text-base font-bold flex items-center gap-2 text-tertiary">
           <span class="material-symbols-outlined">remove_circle</span>
-          <span>Stock Out (Disburse to Department)</span>
+          <span>Stock Out (Disburse / Issue)</span>
         </h3>
         <button onclick="app.closeModal('stockOutModal')" class="text-on-surface-variant hover:text-on-surface text-xl">&times;</button>
       </div>
@@ -982,11 +979,7 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block font-bold text-on-surface mb-1">Source Store *:</label>
-            <select id="stockOutSource" required onchange="app.updateStockOutItemInfo()" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold">
-              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
-              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
-              <option value="Central Warehouse">Central Warehouse</option>
-            </select>
+            <select id="stockOutSource" required onchange="app.updateStockOutItemInfo()" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold"></select>
           </div>
           <div>
             <label class="block font-bold text-on-surface mb-1">Quantity to Disburse *:</label>
@@ -995,7 +988,7 @@
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block font-bold text-on-surface mb-1">Destination Department *:</label>
+            <label class="block font-bold text-on-surface mb-1">Destination Selling Point / Dept *:</label>
             <select id="stockOutDept" required class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface"></select>
           </div>
           <div>
@@ -1005,7 +998,7 @@
         </div>
         <div>
           <label class="block font-bold text-on-surface mb-1">Requested By / Notes:</label>
-          <input type="text" id="stockOutRequester" placeholder="e.g. Sunita Patil (Executive Housekeeper)" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
+          <input type="text" id="stockOutRequester" placeholder="e.g. Store Incharge" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface">
         </div>
         <div class="flex items-center justify-end gap-3 pt-3 border-t border-outline-variant/10">
           <button type="button" onclick="app.closeModal('stockOutModal')" class="px-4 py-2 border border-outline-variant/20 rounded-lg text-on-surface-variant hover:bg-surface-container-high">Cancel</button>
@@ -1035,19 +1028,11 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block font-bold text-on-surface mb-1">From Store *:</label>
-            <select id="transferSource" required onchange="app.updateTransferItemInfo()" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold">
-              <option value="Central Warehouse">Central Warehouse</option>
-              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
-              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
-            </select>
+            <select id="transferSource" required onchange="app.updateTransferItemInfo()" class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold"></select>
           </div>
           <div>
             <label class="block font-bold text-on-surface mb-1">To Store *:</label>
-            <select id="transferDest" required class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold">
-              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
-              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
-              <option value="Central Warehouse">Central Warehouse</option>
-            </select>
+            <select id="transferDest" required class="w-full px-3 py-2 bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-semibold"></select>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-4">

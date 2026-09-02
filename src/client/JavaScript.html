@@ -340,47 +340,58 @@ const app = {
     const tipEl = document.getElementById('chartTooltipVal');
     if (tipEl) tipEl.innerText = this.formatCurrency(m.totalValuation || 0);
 
+    // Update user profile from Users sheet
+    if (this.state.users && this.state.users.length > 0) {
+      const u = this.state.users[0];
+      const nameEl = document.getElementById('headerUserName');
+      if (nameEl) nameEl.innerText = u.name || 'Staff';
+      const roleEl = document.getElementById('headerUserRole');
+      if (roleEl) roleEl.innerText = u.role || 'Inventory Incharge';
+    }
+
+    // Update hotel title from Settings sheet
+    const hotelName = (this.state.settings && this.state.settings.HOTEL_NAME) ? this.state.settings.HOTEL_NAME : '';
+    if (hotelName) {
+      const hEl = document.getElementById('sidebarHotelName');
+      if (hEl) hEl.innerText = hotelName;
+    }
+
     // Dynamic Middle Row
     this.renderCategoryBars(m.categoryBreakdown || {});
     this.renderTopIssuedItems();
     this.renderRecentRequisitions();
 
     // Dynamic Bottom Row
-    this.renderManagedProperties(m.locations);
+    this.renderManagedProperties();
     this.renderLowStockTable(m.lowStockItems || []);
 
     // Reports Breakdown
     this.renderCategoryChart(m.categoryBreakdown || {});
-    this.renderReportsLocations(m.locations);
+    this.renderReportsLocations();
   },
 
   renderCategoryBars: function(categoryMap) {
     const container = document.getElementById('categoryBarsContainer');
     if (!container) return;
 
-    const categories = Object.keys(categoryMap);
+    const categories = Object.keys(categoryMap || {});
     let sorted = categories.map(c => ({
       name: c,
-      units: categoryMap[c].units || (categoryMap[c].count ? categoryMap[c].count * 40 : 150),
+      units: categoryMap[c].units || 0,
       value: categoryMap[c].value || 0
-    })).sort((a, b) => b.units - a.units).slice(0, 5);
+    })).filter(item => item.units > 0).sort((a, b) => b.units - a.units).slice(0, 5);
 
     if (sorted.length === 0) {
-      sorted = [
-        { name: 'Linens', units: 480 },
-        { name: 'Amenities', units: 310 },
-        { name: 'Food & Bev', units: 290 },
-        { name: 'Beverages', units: 245 },
-        { name: 'Cleaning', units: 185 }
-      ];
+      container.innerHTML = `<div class="py-12 text-center text-on-surface-variant text-xs w-full">No category stock recorded in Product_Master sheet yet.</div>`;
+      return;
     }
 
-    const maxUnits = Math.max(...sorted.map(s => s.units), 100);
+    const maxUnits = Math.max(...sorted.map(s => s.units), 10);
     const barColors = ['bg-primary', 'bg-primary-fixed-dim', 'bg-secondary-fixed-dim', 'bg-secondary', 'bg-secondary-container'];
     const yLabels = [Math.round(maxUnits), Math.round(maxUnits * 0.75), Math.round(maxUnits * 0.5), Math.round(maxUnits * 0.25), 0];
 
     const barsHtml = sorted.map((item, idx) => {
-      const heightPct = Math.max(15, Math.round((item.units / maxUnits) * 92));
+      const heightPct = Math.max(10, Math.round((item.units / maxUnits) * 92));
       const colorClass = barColors[idx % barColors.length];
       const shortName = item.name.split(' ')[0].replace('&', '');
       return `
@@ -412,50 +423,39 @@ const app = {
     if (!container) return;
 
     const issueMap = {};
-    this.state.recentTransactions.forEach(t => {
-      if (t.type === 'STOCK_OUT') {
-        const key = t.itemId || t.sku || t.itemName;
+    const txns = this.state.issuanceTransactions || this.state.recentTransactions || [];
+    txns.forEach(t => {
+      if (t.type === 'STOCK_OUT' || t.type === 'DISBURSEMENT') {
+        const key = t.itemCode || t.itemId || t.sku || t.itemName;
         if (!issueMap[key]) {
           issueMap[key] = {
             name: t.itemName,
-            sku: t.sku,
-            category: t.category,
+            sku: t.sku || t.itemCode || key,
+            category: t.category || '',
             qty: 0,
             value: 0
           };
         }
         issueMap[key].qty += Number(t.quantity) || 0;
-        issueMap[key].value += Number(t.totalCost) || (Number(t.quantity) * Number(t.unitPrice)) || 0;
+        issueMap[key].value += Number(t.totalCost || t.totalValue) || 0;
       }
     });
 
-    let list = Object.values(issueMap).sort((a, b) => b.qty - a.qty).slice(0, 3);
+    let list = Object.values(issueMap).sort((a, b) => b.qty - a.qty).slice(0, 5);
 
     if (list.length === 0) {
-      list = this.state.items.slice(0, 3).map((item, idx) => ({
-        name: item.name,
-        sku: item.sku,
-        category: item.category,
-        qty: 120 - idx * 35,
-        value: (120 - idx * 35) * (Number(item.unitCost) || 100),
-        stock: item.totalStock
-      }));
+      container.innerHTML = `<div class="py-8 text-center text-on-surface-variant text-xs w-full">No issued items recorded in Issuance_Transactions sheet yet.</div>`;
+      return;
     }
 
-    const defaultIcons = [
-      '<span class="material-symbols-outlined text-primary text-[22px]">bed</span>',
-      '<span class="material-symbols-outlined text-secondary text-[22px]">dry_cleaning</span>',
-      '<span class="material-symbols-outlined text-tertiary text-[22px]">soap</span>'
-    ];
-
-    container.innerHTML = list.map((item, idx) => {
+    container.innerHTML = list.map(item => {
       const matched = this.state.items.find(i => i.sku === item.sku || i.name === item.name);
-      const stock = matched ? matched.totalStock : (item.stock || 50);
+      const stock = matched ? matched.totalStock : '--';
       return `
         <div onclick="app.openBarcodeModal('${matched ? matched.id : ''}')" class="flex items-center gap-md py-sm px-xs hover:bg-surface-container-high rounded-lg transition-colors group cursor-pointer relative">
           <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div class="w-10 h-10 rounded-md overflow-hidden bg-surface flex-shrink-0 flex items-center justify-center">
-            ${defaultIcons[idx % defaultIcons.length]}
+            <span class="material-symbols-outlined text-primary text-[20px]">inventory_2</span>
           </div>
           <span class="font-body-md text-body-md text-on-surface flex-1 truncate" title="${item.name}">${item.name}</span>
           <span class="font-data-tabular text-data-tabular text-on-surface-variant w-24 truncate">${item.sku}</span>
@@ -471,29 +471,29 @@ const app = {
     const container = document.getElementById('recentReqsList');
     const tbody = document.getElementById('requisitionsTableBody');
 
-    const reqs = this.state.recentTransactions.filter(t => t.type === 'STOCK_OUT' || t.type === 'TRANSFER');
-    const displayReqs = reqs.length > 0 ? reqs.slice(0, 3) : [
-      { id: 'REQ-8812', timestamp: new Date().toISOString(), itemName: 'King Size Bed Sheets', destLocation: 'Deneb Hotel (3rd Fl)', quantity: 45, status: 'Shipped' },
-      { id: 'REQ-6812', timestamp: new Date(Date.now() - 86400000).toISOString(), itemName: 'Organic Amenities Kits', destLocation: 'Pollux Hotel Store', quantity: 18, status: 'Approved' },
-      { id: 'REQ-6809', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), itemName: 'Bath Towels 700GSM', destLocation: 'Housekeeping', quantity: 24, status: 'Pending' }
-    ];
+    const txns = this.state.issuanceTransactions || this.state.recentTransactions || [];
+    const reqs = txns.filter(t => t.type === 'STOCK_OUT' || t.type === 'DISBURSEMENT' || t.type === 'TRANSFER');
+
+    if (reqs.length === 0) {
+      if (container) container.innerHTML = `<div class="py-8 text-center text-on-surface-variant text-xs w-full">No requisitions or issues recorded in sheet yet.</div>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-on-surface-variant text-xs">No requisitions found in sheet.</td></tr>`;
+      return;
+    }
+
+    const displayReqs = reqs.slice(0, 4);
 
     if (container) {
       container.innerHTML = displayReqs.map(r => {
         const d = r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : 'Today';
-        const status = r.status || (r.type === 'TRANSFER' ? 'Shipped' : 'Approved');
-        const statusPill = status === 'Shipped'
-          ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary border border-secondary/20"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span><span class="font-label-caps text-label-caps">Shipped</span></span>`
-          : status === 'Approved'
-          ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary border border-tertiary/20"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span><span class="font-label-caps text-label-caps">Approved</span></span>`
-          : `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-outline-variant/30 text-outline border border-outline-variant/50"><span class="w-1.5 h-1.5 rounded-full bg-outline"></span><span class="font-label-caps text-label-caps">Pending</span></span>`;
+        const status = r.status || 'Approved';
+        const statusPill = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary border border-secondary/20"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span><span class="font-label-caps text-label-caps">${status}</span></span>`;
 
         return `
           <div class="flex items-center gap-md py-sm px-xs hover:bg-surface-container-high rounded-lg transition-colors">
-            <span class="font-data-tabular text-data-tabular text-primary w-24 cursor-pointer hover:underline truncate">${r.reference || '#' + r.id}</span>
+            <span class="font-data-tabular text-data-tabular text-primary w-24 cursor-pointer hover:underline truncate">${r.reference || '#' + (r.id || r.issuanceId || 'REQ')}</span>
             <span class="font-data-tabular text-data-tabular text-on-surface-variant w-16">${d}</span>
             <div class="flex flex-col flex-1 truncate">
-              <span class="font-body-sm text-body-sm text-on-surface truncate">${r.destLocation || r.sourceLocation || 'Department'}</span>
+              <span class="font-body-sm text-body-sm text-on-surface truncate">${r.destLocation || r.toSellingPointName || 'Selling Point'}</span>
             </div>
             <div class="w-20">
               ${statusPill}
@@ -505,22 +505,21 @@ const app = {
     }
 
     if (tbody) {
-      const fullList = reqs.length > 0 ? reqs : displayReqs;
-      tbody.innerHTML = fullList.map(r => {
+      tbody.innerHTML = reqs.map(r => {
         const d = r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : 'Today';
         return `
           <tr class="hover:bg-surface-container-high transition">
-            <td class="py-3 px-4 font-data-tabular text-primary font-bold">${r.reference || r.id}</td>
+            <td class="py-3 px-4 font-data-tabular text-primary font-bold">${r.reference || r.id || '--'}</td>
             <td class="py-3 px-3 font-data-tabular text-on-surface-variant">${d}</td>
-            <td class="py-3 px-4 font-bold text-on-surface">${r.itemName || '--'}</td>
+            <td class="py-3 px-4 font-bold text-on-surface">${r.itemName || r.itemDescription || '--'}</td>
             <td class="py-3 px-3 text-center font-bold font-data-tabular text-secondary">${r.quantity}</td>
-            <td class="py-3 px-3 text-on-surface-variant">${r.sourceLocation || 'Central Warehouse'}</td>
-            <td class="py-3 px-3 font-medium text-on-surface">${r.destLocation || 'Housekeeping'}</td>
-            <td class="py-3 px-3 text-on-surface-variant">${r.performedBy || 'Department Staff'}</td>
+            <td class="py-3 px-3 text-on-surface-variant">${r.sourceLocation || r.fromStoreName || '--'}</td>
+            <td class="py-3 px-3 font-medium text-on-surface">${r.destLocation || r.toSellingPointName || '--'}</td>
+            <td class="py-3 px-3 text-on-surface-variant">${r.performedBy || r.issuedBy || '--'}</td>
             <td class="py-3 px-3 text-center">
               <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary border border-secondary/20">
                 <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                <span class="font-label-caps text-label-caps">Approved</span>
+                <span class="font-label-caps text-label-caps">${r.status || 'Approved'}</span>
               </span>
             </td>
           </tr>
@@ -529,59 +528,36 @@ const app = {
     }
   },
 
-  renderManagedProperties: function(locations) {
+  renderManagedProperties: function() {
     const container = document.getElementById('managedPropertiesList');
     if (!container) return;
 
-    const locData = locations || (this.state.metrics ? this.state.metrics.stores : null) || {
-      central: { units: 1980, valuation: 380000 },
-      s001: { units: 680, valuation: 125000 },
-      s002: { units: 573, valuation: 100330 }
-    };
+    const stores = this.state.stores || [];
+    if (stores.length === 0) {
+      container.innerHTML = `<div class="py-6 text-center text-on-surface-variant text-xs">No stores registered in Location_Master sheet.</div>`;
+      return;
+    }
 
-    const stores = [
-      {
-        name: '21 GUN SOLUTE GGN SEC 29',
-        code: 'S_001',
-        icon: 'storefront',
-        color: 'text-primary',
-        units: (locData.s001 ? locData.s001.units : (locData.deneb ? locData.deneb.units : 0)),
-        valuation: (locData.s001 ? locData.s001.valuation : (locData.deneb ? locData.deneb.valuation : 0)),
-        health: 'Good'
-      },
-      {
-        name: 'PAHLE CHAI GGN Sec 27',
-        code: 'S_002',
-        icon: 'local_cafe',
-        color: 'text-secondary',
-        units: (locData.s002 ? locData.s002.units : (locData.pollux ? locData.pollux.units : 0)),
-        valuation: (locData.s002 ? locData.s002.valuation : (locData.pollux ? locData.pollux.valuation : 0)),
-        health: 'Good'
-      },
-      {
-        name: 'Central Depot Warehouse',
-        code: 'S_000',
-        icon: 'warehouse',
-        color: 'text-tertiary',
-        units: (locData.central ? locData.central.units : 0),
-        valuation: (locData.central ? locData.central.valuation : 0),
-        health: 'Good'
-      }
-    ];
+    const metricsStores = (this.state.metrics && this.state.metrics.stores) ? this.state.metrics.stores : {};
 
     container.innerHTML = stores.map(st => {
-      const badge = st.health === 'Good'
-        ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary border border-secondary/20"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span><span class="font-label-caps text-label-caps">Good</span></span>`
-        : `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary border border-tertiary/20"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span><span class="font-label-caps text-label-caps">Alert</span></span>`;
+      const storeMetric = metricsStores[st.code] || { units: 0, valuation: 0 };
+      const units = storeMetric.units || 0;
+      const val = storeMetric.valuation || 0;
+      const isAlert = units === 0;
+
+      const badge = !isAlert
+        ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary border border-secondary/20"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span><span class="font-label-caps text-label-caps">Active</span></span>`
+        : `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary border border-tertiary/20"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span><span class="font-label-caps text-label-caps">Low</span></span>`;
 
       return `
         <div onclick="app.filterByLocation('${st.name}')" class="flex items-center gap-md p-md bg-surface-container-high rounded-xl border border-transparent hover:border-outline-variant/30 transition-colors cursor-pointer">
           <div class="w-12 h-12 rounded-lg overflow-hidden bg-surface flex-shrink-0 flex items-center justify-center">
-            <span class="material-symbols-outlined ${st.color} text-[28px]">${st.icon}</span>
+            <span class="material-symbols-outlined text-primary text-[26px]">storefront</span>
           </div>
           <div class="flex flex-col flex-1 min-w-0">
-            <span class="font-body-md text-body-md font-semibold text-on-surface truncate">${st.name}</span>
-            <span class="font-body-sm text-body-sm text-on-surface-variant truncate">Stock: <strong class="text-on-surface font-data-tabular">${this.formatNumber(st.units)} units</strong> | ${this.formatCurrency(st.valuation)}</span>
+            <span class="font-body-md text-body-md font-semibold text-on-surface truncate">[${st.code}] ${st.name}</span>
+            <span class="font-body-sm text-body-sm text-on-surface-variant truncate">Stock: <strong class="text-on-surface font-data-tabular">${this.formatNumber(units)} units</strong> | ${this.formatCurrency(val)}</span>
           </div>
           <div class="flex-shrink-0">
             ${badge}
@@ -595,16 +571,14 @@ const app = {
     const container = document.getElementById('dashLowStockTable');
     if (!container) return;
 
-    let list = (items && items.length > 0) ? items.slice(0, 3) : this.state.items.filter(i => (Number(i.totalStock) || 0) <= (Number(i.minStock) || 0)).slice(0, 3);
+    const lowItems = (items && items.length > 0) ? items : this.state.items.filter(i => (Number(i.totalStock) || 0) <= (Number(i.minStock) || 0));
 
-    if (list.length === 0) {
-      list = [
-        { id: 'ITM-1014', sku: 'DP-CL-002', name: 'High Efficiency Laundry Detergent', totalStock: 15, minStock: 20 },
-        { id: 'ITM-1008', sku: 'DP-FB-003', name: 'Organic Extra Virgin Olive Oil 5L', totalStock: 31, minStock: 30 }
-      ];
+    if (lowItems.length === 0) {
+      container.innerHTML = `<div class="py-8 text-center text-secondary text-xs flex items-center justify-center gap-2"><span class="material-symbols-outlined text-[18px]">check_circle</span>All items in Product_Master are above minimum stock levels.</div>`;
+      return;
     }
 
-    container.innerHTML = list.map(item => {
+    container.innerHTML = lowItems.slice(0, 5).map(item => {
       const isCrit = (Number(item.totalStock) || 0) === 0;
       const statusBadge = isCrit
         ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-error/20 text-error border border-error/20"><span class="w-1.5 h-1.5 rounded-full bg-error"></span><span class="font-label-caps text-label-caps">Critical</span></span>`
@@ -623,26 +597,26 @@ const app = {
     }).join('');
   },
 
-  renderReportsLocations: function(locations) {
-    if (!locations) return;
-    const c = locations.central || { units: 0, valuation: 0 };
-    const d = locations.deneb || { units: 0, valuation: 0 };
-    const p = locations.pollux || { units: 0, valuation: 0 };
+  renderReportsLocations: function() {
+    const metricsStores = (this.state.metrics && this.state.metrics.stores) ? this.state.metrics.stores : {};
+    const s001 = metricsStores['S_001'] || { units: 0, valuation: 0 };
+    const s002 = metricsStores['S_002'] || { units: 0, valuation: 0 };
+    const central = metricsStores['S_000'] || { units: 0, valuation: 0 };
 
     const cVal = document.getElementById('repValCentral');
-    if (cVal) cVal.innerText = this.formatCurrency(c.valuation);
+    if (cVal) cVal.innerText = this.formatCurrency(central.valuation);
     const cUnits = document.getElementById('repUnitsCentral');
-    if (cUnits) cUnits.innerText = `${this.formatNumber(c.units)} physical units`;
+    if (cUnits) cUnits.innerText = `${this.formatNumber(central.units)} physical units`;
 
     const dVal = document.getElementById('repValDeneb');
-    if (dVal) dVal.innerText = this.formatCurrency(d.valuation);
+    if (dVal) dVal.innerText = this.formatCurrency(s001.valuation);
     const dUnits = document.getElementById('repUnitsDeneb');
-    if (dUnits) dUnits.innerText = `${this.formatNumber(d.units)} physical units`;
+    if (dUnits) dUnits.innerText = `${this.formatNumber(s001.units)} physical units`;
 
     const pVal = document.getElementById('repValPollux');
-    if (pVal) pVal.innerText = this.formatCurrency(p.valuation);
+    if (pVal) pVal.innerText = this.formatCurrency(s002.valuation);
     const pUnits = document.getElementById('repUnitsPollux');
-    if (pUnits) pUnits.innerText = `${this.formatNumber(p.units)} physical units`;
+    if (pUnits) pUnits.innerText = `${this.formatNumber(s002.units)} physical units`;
   },
 
   renderCategoryChart: function(categoryMap) {
@@ -1901,64 +1875,30 @@ const app = {
     this.showToast('Transactions audit log exported to CSV!');
   },
 
-  // Fallback Mock data for previewing outside Google Apps Script
-  getMockData: function() {
+  // Fallback empty data when previewing outside Google Apps Script
+  getMockInitialData: function() {
     return {
-      dbInfo: { id: 'mock-sheet-id-dnp-hotels', name: 'DNP HOTELS IMS - Mock Data', url: '#' },
-      settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'DNP HOTELS' },
+      dbInfo: { id: '', name: 'Google Sheets Database', url: '#' },
+      settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: '21 Gun Salute & Pahle Chai (DNP Hotels)' },
       metrics: {
-        totalSkus: 15,
-        totalValuation: 605330,
-        totalUnits: 3233,
-        lowStockCount: 2,
+        totalSkus: 0,
+        totalValuation: 0,
+        totalUnits: 0,
+        lowStockCount: 0,
         outOfStockCount: 0,
-        locations: {
-          central: { units: 1980, valuation: 380000 },
-          deneb: { units: 680, valuation: 125000 },
-          pollux: { units: 573, valuation: 100330 }
-        },
-        categoryBreakdown: {
-          'Housekeeping & Linens': { count: 2, value: 214750 },
-          'Guest Amenities & Toiletries': { count: 3, value: 46200 },
-          'Food & Beverage': { count: 3, value: 198000 },
-          'Bar & Beverages': { count: 1, value: 144000 },
-          'Front Office & Stationery': { count: 2, value: 53550 },
-          'Maintenance & Engineering': { count: 2, value: 31980 },
-          'Cleaning & Chemicals': { count: 2, value: 91000 }
-        },
-        lowStockItems: [
-          { id: 'ITM-1014', sku: 'DP-CL-002', name: 'High Efficiency Laundry Detergent 25kg', category: 'Cleaning & Chemicals', unit: 'Drums', totalStock: 15, minStock: 20 },
-          { id: 'ITM-1008', sku: 'DP-FB-003', name: 'Organic Extra Virgin Olive Oil 5L', category: 'Food & Beverage', unit: 'Tins', totalStock: 31, minStock: 30 }
-        ],
-        todaySummary: { txnCount: 4, stockIn: 350, stockOut: 25, transfers: 45 }
+        stores: {},
+        categoryBreakdown: {},
+        lowStockItems: [],
+        todaySummary: { txnCount: 0, stockIn: 0, stockOut: 0 }
       },
-      items: [
-        { id: 'ITM-1001', sku: 'DP-HK-001', name: 'King Size Bed Sheet 400TC (White)', category: 'Housekeeping & Linens', unit: 'Pcs', minStock: 20, centralStock: 50, denebStock: 25, polluxStock: 20, totalStock: 95, unitCost: 1200, totalValue: 114000, supplier: 'Apex Hospitality Linens', storageLocation: 'Aisle 1 - Shelf A' },
-        { id: 'ITM-1002', sku: 'DP-HK-002', name: 'Bath Towel 700GSM Luxury Cotton', category: 'Housekeeping & Linens', unit: 'Pcs', minStock: 30, centralStock: 80, denebStock: 40, polluxStock: 35, totalStock: 155, unitCost: 650, totalValue: 100750, supplier: 'Apex Hospitality Linens', storageLocation: 'Aisle 1 - Shelf B' },
-        { id: 'ITM-1003', sku: 'DP-AM-001', name: 'Organic Shampoo 30ml Eco-Bottle', category: 'Guest Amenities & Toiletries', unit: 'Bottles', minStock: 100, centralStock: 400, denebStock: 150, polluxStock: 120, totalStock: 670, unitCost: 25, totalValue: 16750, supplier: 'Luxe Spa & Botanicals', storageLocation: 'Aisle 2 - Shelf A' },
-        { id: 'ITM-1006', sku: 'DP-FB-001', name: 'Arabica Dark Roast Coffee Beans 1kg', category: 'Food & Beverage', unit: 'Bags', minStock: 15, centralStock: 40, denebStock: 12, polluxStock: 10, totalStock: 62, unitCost: 1100, totalValue: 68200, supplier: 'Estate Harvest Roasters', storageLocation: 'Pantry 1 - Cool Rack' },
-        { id: 'ITM-1015', sku: 'DP-BV-001', name: 'Cabernet Sauvignon Reserve 750ml', category: 'Bar & Beverages', unit: 'Bottles', minStock: 12, centralStock: 48, denebStock: 18, polluxStock: 14, totalStock: 80, unitCost: 1800, totalValue: 144000, supplier: 'Vintage Wine Merchants', storageLocation: 'Cellar Bin 12' }
-      ],
-      suppliers: [
-        { id: 'SUP-101', name: 'Apex Hospitality Linens', contactPerson: 'Rahul Sharma', email: 'orders@apexlinens.com', phone: '+91 98765 43210', categorySupplied: 'Housekeeping & Linens', status: 'Active' },
-        { id: 'SUP-102', name: 'Luxe Spa & Botanicals', contactPerson: 'Priya Menon', email: 'supply@luxebotanicals.com', phone: '+91 98234 56789', categorySupplied: 'Guest Amenities', status: 'Active' },
-        { id: 'SUP-103', name: 'Estate Harvest Roasters', contactPerson: 'Vikram Sen', email: 'b2b@estateharvest.com', phone: '+91 97112 34567', categorySupplied: 'Food & Beverage', status: 'Active' }
-      ],
-      departments: [
-        { id: 'DEP-01', name: 'Housekeeping', propertyScope: 'Both Properties', headOfDepartment: 'Ms. Sunita Patil' },
-        { id: 'DEP-02', name: 'F&B Production (Kitchen)', propertyScope: 'Both Properties', headOfDepartment: 'Chef Antoine Girard' },
-        { id: 'DEP-03', name: 'Front Office & Concierge', propertyScope: 'Both Properties', headOfDepartment: 'Ms. Neha Gupta' },
-        { id: 'DEP-04', name: 'Engineering & Maintenance', propertyScope: 'Both Properties', headOfDepartment: 'Mr. K. R. Nambiar' }
-      ],
-      locations: [
-        { code: 'CENTRAL', name: 'Central Warehouse', type: 'Main Distribution Depot' },
-        { code: 'DENEB', name: 'Deneb Hotel Store', type: 'Property Main Store' },
-        { code: 'POLLUX', name: 'Pollux Hotel Store', type: 'Property Main Store' }
-      ],
-      recentTransactions: [
-        { id: 'TXN-20260902-101', timestamp: new Date().toISOString(), type: 'STOCK_IN', sku: 'DP-AM-001', itemName: 'Organic Shampoo 30ml Eco-Bottle', quantity: 300, unit: 'Bottles', sourceLocation: 'Luxe Spa & Botanicals', destLocation: 'Central Warehouse', totalCost: 7500, reference: 'PO-2026-908', performedBy: 'Inventory Mgr' },
-        { id: 'TXN-20260902-102', timestamp: new Date().toISOString(), type: 'TRANSFER', sku: 'DP-HK-001', itemName: 'King Size Bed Sheet 400TC (White)', quantity: 25, unit: 'Pcs', sourceLocation: 'Central Warehouse', destLocation: 'Deneb Hotel Store', totalCost: 30000, reference: 'TRF-0881', performedBy: 'Logistics Coord' }
-      ]
+      items: [],
+      suppliers: [],
+      stores: [],
+      sellingPoints: [],
+      users: [],
+      supplierTransactions: [],
+      issuanceTransactions: [],
+      recentTransactions: []
     };
   }
 };
