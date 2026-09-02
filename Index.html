@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Deneb & Pollux Hotels | Inventory Management System</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f8fafc',
+              100: '#f1f5f9',
+              800: '#1e293b',
+              900: '#0f172a',
+              gold: '#d97706',
+              goldLight: '#fef3c7',
+              goldDark: '#b45309',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- FontAwesome 6 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- JsBarcode -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <!-- HTML5 QR / Barcode Scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  
+  <?!= include('Styles'); ?>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+
+  <!-- TOP APP HEADER -->
+  <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16 sm:h-20">
+        <!-- Logo & Title -->
+        <div class="flex items-center space-x-3 sm:space-x-4">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white shadow-md shadow-amber-500/20">
+            <i class="fa-solid fa-hotel text-lg sm:text-xl"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-extrabold text-base sm:text-xl tracking-tight text-white uppercase">Deneb &amp; Pollux</span>
+              <span class="bg-amber-500/20 text-amber-400 text-xs font-semibold px-2 py-0.5 rounded border border-amber-500/30">Hotels &amp; Resorts</span>
+            </div>
+            <p class="text-xs text-slate-400 font-medium tracking-wide">Enterprise Inventory Management System</p>
+          </div>
+        </div>
+
+        <!-- Property Scope & Top Quick Actions -->
+        <div class="flex items-center space-x-2 sm:space-x-4">
+          <!-- Property Filter Dropdown -->
+          <div class="hidden md:flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700">
+            <span class="text-xs text-slate-400 px-2 font-medium"><i class="fa-solid fa-location-dot text-amber-400 mr-1"></i>View:</span>
+            <select id="headerPropertyFilter" onchange="app.handlePropertyFilterChange(this.value)" class="bg-slate-900 text-xs font-semibold text-slate-200 rounded px-2.5 py-1.5 outline-none cursor-pointer border border-slate-700 hover:border-slate-600 focus:ring-1 focus:ring-amber-400">
+              <option value="ALL">All Properties &amp; Central</option>
+              <option value="DENEB">Deneb Hotel Store</option>
+              <option value="POLLUX">Pollux Hotel Store</option>
+              <option value="CENTRAL">Central Warehouse</option>
+            </select>
+          </div>
+
+          <!-- Open Sheet Link Button -->
+          <a id="openSheetBtn" href="#" target="_blank" title="Open Connected Google Sheet Database" class="hidden sm:inline-flex items-center space-x-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold transition">
+            <i class="fa-solid fa-file-excel text-emerald-400"></i>
+            <span>Google Sheet</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </a>
+
+          <!-- Camera Scanner Quick Trigger -->
+          <button onclick="app.openScannerModal()" title="Scan Item Barcode" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition">
+            <i class="fa-solid fa-barcode text-sm"></i>
+            <span class="hidden sm:inline">Scan Barcode</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-NAV / MAIN TABS -->
+    <div class="bg-slate-950/80 border-t border-slate-800/80 backdrop-blur-md">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <nav class="flex space-x-1 sm:space-x-6 overflow-x-auto py-2.5 text-xs sm:text-sm font-medium" id="mainNavigationTabs">
+          <button onclick="app.switchTab('dashboard')" id="tabBtn-dashboard" class="tab-btn px-3 py-1.5 rounded-lg text-amber-400 bg-slate-800/80 flex items-center space-x-2 transition font-semibold">
+            <i class="fa-solid fa-chart-pie"></i>
+            <span>Dashboard</span>
+          </button>
+          <button onclick="app.switchTab('inventory')" id="tabBtn-inventory" class="tab-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/50 flex items-center space-x-2 transition">
+            <i class="fa-solid fa-boxes-stacked"></i>
+            <span>Inventory Catalog</span>
+            <span id="navTotalItemsBadge" class="bg-slate-700 text-[10px] text-slate-300 px-1.5 py-0.2 rounded-full">0</span>
+          </button>
+          <button onclick="app.switchTab('transactions')" id="tabBtn-transactions" class="tab-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/50 flex items-center space-x-2 transition">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>Stock Audit &amp; Movements</span>
+          </button>
+          <button onclick="app.switchTab('suppliers')" id="tabBtn-suppliers" class="tab-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/50 flex items-center space-x-2 transition">
+            <i class="fa-solid fa-truck-ramp-box"></i>
+            <span>Suppliers Directory</span>
+          </button>
+          <button onclick="app.switchTab('departments')" id="tabBtn-departments" class="tab-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/50 flex items-center space-x-2 transition">
+            <i class="fa-solid fa-sitemap"></i>
+            <span>Departments</span>
+          </button>
+          <button onclick="app.switchTab('settings')" id="tabBtn-settings" class="tab-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/50 flex items-center space-x-2 transition">
+            <i class="fa-solid fa-database"></i>
+            <span>Database &amp; Settings</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- QUICK ACTION TOOLBAR (VISIBLE ACROSS TABS) -->
+  <div class="bg-white border-b border-slate-200 py-3 shadow-sm sticky top-[108px] sm:top-[120px] z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-3">
+      <!-- Fast Transaction Actions -->
+      <div class="flex items-center flex-wrap gap-2">
+        <button onclick="app.openStockInModal()" class="inline-flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition">
+          <i class="fa-solid fa-circle-down"></i>
+          <span>+ Stock In (Purchase)</span>
+        </button>
+        <button onclick="app.openStockOutModal()" class="inline-flex items-center space-x-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition">
+          <i class="fa-solid fa-circle-up"></i>
+          <span>- Stock Out (Disburse)</span>
+        </button>
+        <button onclick="app.openTransferModal()" class="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition">
+          <i class="fa-solid fa-right-left"></i>
+          <span>⇄ Inter-Hotel Transfer</span>
+        </button>
+        <button onclick="app.openAdjustmentModal()" class="inline-flex items-center space-x-1.5 bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Audit Adjustment</span>
+        </button>
+      </div>
+
+      <!-- Add New Item & Refresh Actions -->
+      <div class="flex items-center space-x-2">
+        <button onclick="app.openItemModal()" class="inline-flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow transition">
+          <i class="fa-solid fa-plus text-amber-400"></i>
+          <span>New Inventory Item</span>
+        </button>
+        <button onclick="app.loadInitialData(true)" title="Refresh Data from Google Sheet" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs border border-slate-300 transition">
+          <i id="refreshIcon" class="fa-solid fa-rotate text-sm"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP CONTENT CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ============================================================== -->
+    <!-- TAB 1: DASHBOARD -->
+    <!-- ============================================================== -->
+    <div id="tabContent-dashboard" class="tab-pane space-y-6">
+      
+      <!-- Top KPI Metric Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <!-- Total Inventory Valuation -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Inventory Value</span>
+            <div class="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-base">
+              <span id="kpiCurrencySymbol">₹</span>
+            </div>
+          </div>
+          <p id="kpiTotalValuation" class="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">--</p>
+          <div class="mt-2 flex items-center text-xs text-slate-500">
+            <span class="text-emerald-600 font-semibold mr-1.5"><i class="fa-solid fa-warehouse mr-1"></i>Combined</span>
+            across all stores
+          </div>
+          <div class="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none text-6xl">
+            <i class="fa-solid fa-sack-dollar"></i>
+          </div>
+        </div>
+
+        <!-- Total SKUs -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Catalog SKUs</span>
+            <div class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <i class="fa-solid fa-boxes-stacked"></i>
+            </div>
+          </div>
+          <p id="kpiTotalSkus" class="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">--</p>
+          <div class="mt-2 flex items-center text-xs text-slate-500">
+            <span id="kpiTotalUnits" class="font-semibold text-slate-700 mr-1">0</span> total physical units
+          </div>
+          <div class="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none text-6xl">
+            <i class="fa-solid fa-boxes-packing"></i>
+          </div>
+        </div>
+
+        <!-- Low Stock Alert Counter -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative overflow-hidden cursor-pointer" onclick="app.filterCatalogByLowStock()">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-rose-600 uppercase tracking-wider">Low Stock Warnings</span>
+            <div id="lowStockIconBadge" class="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+          </div>
+          <p id="kpiLowStockCount" class="mt-2 text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight">--</p>
+          <div class="mt-2 flex items-center text-xs text-rose-500 font-medium">
+            <span>Requires urgent purchase</span>
+            <i class="fa-solid fa-chevron-right ml-1 text-[10px]"></i>
+          </div>
+          <div class="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none text-6xl">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+        </div>
+
+        <!-- Today's Transactions -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Today's Transactions</span>
+            <div class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <i class="fa-solid fa-arrow-right-arrow-left"></i>
+            </div>
+          </div>
+          <p id="kpiTodayTxns" class="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">--</p>
+          <div class="mt-2 flex items-center text-xs text-slate-500 space-x-2">
+            <span id="kpiStockInToday" class="text-emerald-600 font-semibold">+0 In</span>
+            <span>•</span>
+            <span id="kpiStockOutToday" class="text-amber-600 font-semibold">-0 Out</span>
+          </div>
+          <div class="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none text-6xl">
+            <i class="fa-solid fa-dolly"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Multi-Property Breakdown Strip -->
+      <div class="bg-slate-900 rounded-xl p-5 text-white shadow-md">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-2">
+          <div>
+            <h3 class="text-sm font-bold tracking-wide uppercase text-amber-400">Property Inventory Valuation Breakdown</h3>
+            <p class="text-xs text-slate-400">Live multi-property distribution between hotels and central depot</p>
+          </div>
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-400/10 text-amber-300 border border-amber-400/20">
+            <i class="fa-solid fa-circle text-[8px] mr-1.5 text-emerald-400 animate-pulse"></i> Real-Time Synced
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <!-- Central Warehouse Card -->
+          <div class="bg-slate-800/80 rounded-lg p-4 border border-slate-700/80 hover:border-slate-600 transition">
+            <div class="flex items-center justify-between text-xs text-slate-400 font-medium mb-1">
+              <span class="flex items-center"><i class="fa-solid fa-warehouse text-amber-400 mr-1.5"></i>Central Warehouse</span>
+              <span class="bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded text-[10px]">Depot</span>
+            </div>
+            <div class="flex items-baseline justify-between mt-2">
+              <span id="cardCentralValuation" class="text-lg font-bold text-white">--</span>
+              <span id="cardCentralUnits" class="text-xs text-slate-400 font-medium">-- units</span>
+            </div>
+          </div>
+
+          <!-- Deneb Hotel Card -->
+          <div class="bg-slate-800/80 rounded-lg p-4 border border-slate-700/80 hover:border-slate-600 transition">
+            <div class="flex items-center justify-between text-xs text-slate-400 font-medium mb-1">
+              <span class="flex items-center"><i class="fa-solid fa-hotel text-blue-400 mr-1.5"></i>Deneb Hotel Store</span>
+              <span class="bg-blue-900/60 text-blue-300 px-1.5 py-0.5 rounded text-[10px]">Property 1</span>
+            </div>
+            <div class="flex items-baseline justify-between mt-2">
+              <span id="cardDenebValuation" class="text-lg font-bold text-white">--</span>
+              <span id="cardDenebUnits" class="text-xs text-slate-400 font-medium">-- units</span>
+            </div>
+          </div>
+
+          <!-- Pollux Hotel Card -->
+          <div class="bg-slate-800/80 rounded-lg p-4 border border-slate-700/80 hover:border-slate-600 transition">
+            <div class="flex items-center justify-between text-xs text-slate-400 font-medium mb-1">
+              <span class="flex items-center"><i class="fa-solid fa-hotel text-purple-400 mr-1.5"></i>Pollux Hotel Store</span>
+              <span class="bg-purple-900/60 text-purple-300 px-1.5 py-0.5 rounded text-[10px]">Property 2</span>
+            </div>
+            <div class="flex items-baseline justify-between mt-2">
+              <span id="cardPolluxValuation" class="text-lg font-bold text-white">--</span>
+              <span id="cardPolluxUnits" class="text-xs text-slate-400 font-medium">-- units</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts & Low Stock Alerts Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Chart: Category Breakdown -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm lg:col-span-1 flex flex-col">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Valuation by Category</h3>
+            <i class="fa-solid fa-chart-pie text-slate-400"></i>
+          </div>
+          <div class="relative flex-1 flex items-center justify-center p-2 min-h-[240px]">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Critical Low Stock Alert Table -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm lg:col-span-2 flex flex-col">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+              <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Low Stock Priority Alerts</h3>
+            </div>
+            <button onclick="app.switchTab('inventory')" class="text-xs font-semibold text-amber-600 hover:text-amber-700">View Full Inventory &rarr;</button>
+          </div>
+          <div class="overflow-x-auto flex-1 mt-2">
+            <table class="w-full text-left text-xs">
+              <thead class="text-slate-400 uppercase border-b border-slate-100">
+                <tr>
+                  <th class="py-2.5 font-semibold">SKU / Item</th>
+                  <th class="py-2.5 font-semibold">Category</th>
+                  <th class="py-2.5 font-semibold text-center">Current</th>
+                  <th class="py-2.5 font-semibold text-center">Min Level</th>
+                  <th class="py-2.5 font-semibold text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="lowStockTableBody" class="divide-y divide-slate-100 text-slate-700">
+                <tr>
+                  <td colspan="5" class="py-6 text-center text-slate-400">Checking inventory levels...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Transactions Mini Feed -->
+      <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Latest Stock Movements</h3>
+          <button onclick="app.switchTab('transactions')" class="text-xs font-semibold text-amber-600 hover:text-amber-700">View All History &rarr;</button>
+        </div>
+        <div class="overflow-x-auto mt-2">
+          <table class="w-full text-left text-xs">
+            <thead class="text-slate-400 uppercase border-b border-slate-100">
+              <tr>
+                <th class="py-2.5 font-semibold">Txn ID</th>
+                <th class="py-2.5 font-semibold">Time</th>
+                <th class="py-2.5 font-semibold">Type</th>
+                <th class="py-2.5 font-semibold">Item</th>
+                <th class="py-2.5 font-semibold text-center">Qty</th>
+                <th class="py-2.5 font-semibold">From / Source</th>
+                <th class="py-2.5 font-semibold">To / Dept</th>
+                <th class="py-2.5 font-semibold">Staff</th>
+              </tr>
+            </thead>
+            <tbody id="dashboardTxnTableBody" class="divide-y divide-slate-100 text-slate-700">
+              <tr>
+                <td colspan="8" class="py-4 text-center text-slate-400">Loading recent movements...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 2: INVENTORY CATALOG -->
+    <!-- ============================================================== -->
+    <div id="tabContent-inventory" class="tab-pane hidden space-y-4">
+      
+      <!-- Search, Filter & Quick Action Bar -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <!-- Search Input -->
+        <div class="relative flex-1">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+          <input type="text" id="catalogSearchInput" oninput="app.filterCatalog()" placeholder="Search by Item Name, SKU, Barcode, or Supplier..." class="w-full pl-9 pr-4 py-2 bg-slate-50 rounded-lg text-xs sm:text-sm border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition">
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Category Filter -->
+          <select id="catalogCategoryFilter" onchange="app.filterCatalog()" class="bg-slate-50 text-xs font-medium border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-amber-500">
+            <option value="ALL">All Categories</option>
+          </select>
+
+          <!-- Stock Status Filter -->
+          <select id="catalogStockFilter" onchange="app.filterCatalog()" class="bg-slate-50 text-xs font-medium border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-amber-500">
+            <option value="ALL">All Stock Levels</option>
+            <option value="LOW">Low Stock Only</option>
+            <option value="OUT">Out of Stock</option>
+            <option value="OK">Sufficient Stock</option>
+          </select>
+
+          <!-- Export CSV -->
+          <button onclick="app.exportCatalogCSV()" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-300 transition" title="Export to CSV">
+            <i class="fa-solid fa-file-csv text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Items Count and Active Filters bar -->
+      <div class="flex items-center justify-between text-xs text-slate-500 px-1">
+        <span id="catalogCountLabel">Showing 0 items</span>
+        <div class="flex items-center space-x-2">
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span> In Stock
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500"></span> Low Stock
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-rose-500"></span> Out of Stock
+        </div>
+      </div>
+
+      <!-- Inventory Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs divide-y divide-slate-200">
+            <thead class="bg-slate-900 text-white font-semibold uppercase text-[11px] tracking-wider">
+              <tr>
+                <th class="py-3 px-4">SKU / Barcode</th>
+                <th class="py-3 px-4">Item Name &amp; Category</th>
+                <th class="py-3 px-3 text-center bg-slate-800 text-slate-300" title="Central Warehouse Stock">Central</th>
+                <th class="py-3 px-3 text-center bg-slate-800 text-blue-300" title="Deneb Hotel Store Stock">Deneb</th>
+                <th class="py-3 px-3 text-center bg-slate-800 text-purple-300" title="Pollux Hotel Store Stock">Pollux</th>
+                <th class="py-3 px-3 text-center font-bold text-amber-400">Total</th>
+                <th class="py-3 px-3 text-center">Min Level</th>
+                <th class="py-3 px-3 text-right">Unit Cost</th>
+                <th class="py-3 px-4 text-right">Total Valuation</th>
+                <th class="py-3 px-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="catalogTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+              <tr>
+                <td colspan="10" class="py-12 text-center text-slate-400">
+                  <i class="fa-solid fa-spinner fa-spin text-xl text-amber-500 mb-2"></i>
+                  <p>Loading inventory database...</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 3: STOCK AUDIT & MOVEMENTS (TRANSACTIONS) -->
+    <!-- ============================================================== -->
+    <div id="tabContent-transactions" class="tab-pane hidden space-y-4">
+      
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <!-- Search -->
+        <div class="relative flex-1">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+          <input type="text" id="txnSearchInput" oninput="app.filterTransactions()" placeholder="Search transactions by item, PO, reference, requester, or staff..." class="w-full pl-9 pr-4 py-2 bg-slate-50 rounded-lg text-xs sm:text-sm border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition">
+        </div>
+
+        <!-- Type Filter -->
+        <div class="flex items-center space-x-2">
+          <select id="txnTypeFilter" onchange="app.filterTransactions()" class="bg-slate-50 text-xs font-medium border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-amber-500">
+            <option value="ALL">All Types</option>
+            <option value="STOCK_IN">Stock In (Purchase)</option>
+            <option value="STOCK_OUT">Stock Out (Issued to Dept)</option>
+            <option value="TRANSFER">Inter-Hotel Transfer</option>
+            <option value="ADJUSTMENT">Audit Adjustment</option>
+          </select>
+
+          <!-- Export CSV -->
+          <button onclick="app.exportTransactionsCSV()" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-300 transition" title="Export Log to CSV">
+            <i class="fa-solid fa-file-csv text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Transactions History Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs divide-y divide-slate-200">
+            <thead class="bg-slate-900 text-white font-semibold uppercase text-[11px] tracking-wider">
+              <tr>
+                <th class="py-3 px-4">Txn ID</th>
+                <th class="py-3 px-3">Date &amp; Time</th>
+                <th class="py-3 px-3">Type</th>
+                <th class="py-3 px-4">Item Details</th>
+                <th class="py-3 px-3 text-center">Qty</th>
+                <th class="py-3 px-3">Source Store</th>
+                <th class="py-3 px-3">Destination / Dept</th>
+                <th class="py-3 px-3 text-right">Value</th>
+                <th class="py-3 px-3">Ref / PO</th>
+                <th class="py-3 px-4">Staff / Notes</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+              <tr>
+                <td colspan="10" class="py-12 text-center text-slate-400">Loading audit records...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 4: SUPPLIERS DIRECTORY -->
+    <!-- ============================================================== -->
+    <div id="tabContent-suppliers" class="tab-pane hidden space-y-4">
+      
+      <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div>
+          <h3 class="text-sm font-bold text-slate-800">Approved Hotel Suppliers &amp; Vendors</h3>
+          <p class="text-xs text-slate-500">Contact list and categories supplied for Deneb &amp; Pollux properties</p>
+        </div>
+        <button onclick="app.openSupplierModal()" class="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow transition">
+          <i class="fa-solid fa-plus text-amber-400 mr-1"></i> Add Supplier
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="suppliersGridContainer">
+        <!-- Supplier cards rendered via JS -->
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 5: DEPARTMENTS & LOCATIONS -->
+    <!-- ============================================================== -->
+    <div id="tabContent-departments" class="tab-pane hidden space-y-6">
+      
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Hotel Departments -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Hotel Operating Departments</h3>
+              <p class="text-xs text-slate-500">Disbursement destinations for inventory requisitions</p>
+            </div>
+            <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded">Active</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="text-slate-400 uppercase border-b border-slate-100">
+                <tr>
+                  <th class="py-2 font-semibold">Department</th>
+                  <th class="py-2 font-semibold">Property Scope</th>
+                  <th class="py-2 font-semibold">Head of Dept</th>
+                </tr>
+              </thead>
+              <tbody id="departmentsTableBody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Departments rendered via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Inventory Stores & Locations -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Warehouse &amp; Property Stores</h3>
+              <p class="text-xs text-slate-500">Storage locations tracking separate physical stock balances</p>
+            </div>
+            <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded">3 Hubs</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="text-slate-400 uppercase border-b border-slate-100">
+                <tr>
+                  <th class="py-2 font-semibold">Code</th>
+                  <th class="py-2 font-semibold">Location Name</th>
+                  <th class="py-2 font-semibold">Type</th>
+                </tr>
+              </thead>
+              <tbody id="locationsTableBody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Locations rendered via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 6: DATABASE & SETTINGS -->
+    <!-- ============================================================== -->
+    <div id="tabContent-settings" class="tab-pane hidden space-y-6">
+      
+      <!-- Google Sheet Connection Card -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center">
+              <i class="fa-solid fa-file-excel text-emerald-600 mr-2 text-lg"></i>
+              Google Sheets Backend Connection
+            </h3>
+            <p class="text-xs text-slate-500 mt-1">Connect your existing Google Sheet or let the system manage the auto-created database.</p>
+          </div>
+          <span id="dbStatusBadge" class="self-start sm:self-auto inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <i class="fa-solid fa-check-circle mr-1.5 text-emerald-600"></i> Connected
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div>
+            <span class="text-slate-400 uppercase font-semibold">Connected Spreadsheet:</span>
+            <p id="settingsDbName" class="text-slate-800 font-bold text-sm mt-0.5">--</p>
+          </div>
+          <div>
+            <span class="text-slate-400 uppercase font-semibold">Spreadsheet ID:</span>
+            <p id="settingsDbId" class="text-slate-600 font-mono text-xs mt-0.5 truncate select-all">--</p>
+          </div>
+        </div>
+
+        <!-- Custom Sheet URL / ID Input -->
+        <div class="space-y-2 pt-2">
+          <label class="block text-xs font-bold uppercase text-slate-700">Connect Custom Google Sheet (URL or ID):</label>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" id="customSheetInput" placeholder="Paste Google Sheet URL (https://docs.google.com/spreadsheets/d/...) or ID" class="flex-1 px-3.5 py-2 bg-white rounded-lg text-xs border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500">
+            <button onclick="app.connectCustomSheet()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition flex items-center justify-center space-x-1.5">
+              <i class="fa-solid fa-link"></i>
+              <span>Connect Sheet</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400">If you provide your own Google Sheet, the system will automatically verify or create the required tabs (Items, Transactions, Suppliers, etc.) without losing your data.</p>
+        </div>
+
+        <div class="pt-4 flex flex-wrap items-center gap-3 border-t border-slate-100">
+          <a id="settingsDirectSheetLink" href="#" target="_blank" class="inline-flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition border border-slate-300">
+            <i class="fa-solid fa-arrow-up-right-from-square text-emerald-600"></i>
+            <span>Open Google Sheet in New Tab</span>
+          </a>
+          <button onclick="app.reseedDemoData()" class="inline-flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-semibold transition">
+            <i class="fa-solid fa-rotate-right"></i>
+            <span>Re-seed Sample Hotel Data</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- App Configuration Form -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <h3 class="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">Hotel Configuration &amp; Currency</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Organization / Hotel Name:</label>
+            <input type="text" id="settingHotelName" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Currency Symbol:</label>
+            <input type="text" id="settingCurrencySymbol" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs" placeholder="₹, $, €, £, etc.">
+          </div>
+        </div>
+        <div class="pt-2">
+          <button onclick="app.saveAppSettings()" class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition">
+            Save Preferences
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ============================================================== -->
+  <!-- MODALS -->
+  <!-- ============================================================== -->
+
+  <!-- 1. ADD / EDIT ITEM MODAL -->
+  <div id="itemModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeModal('itemModal')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto z-10 border border-slate-200">
+      <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+        <h3 id="itemModalTitle" class="text-base font-bold flex items-center">
+          <i class="fa-solid fa-box text-amber-400 mr-2"></i> Add New Inventory Item
+        </h3>
+        <button onclick="app.closeModal('itemModal')" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+      <form id="itemForm" onsubmit="app.handleItemFormSubmit(event)" class="p-6 space-y-4 text-xs">
+        <input type="hidden" id="itemId">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">SKU / Barcode <span class="text-slate-400 font-normal">(Leave blank to auto-generate)</span>:</label>
+            <input type="text" id="itemSku" placeholder="e.g. DP-HK-001" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 uppercase">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Category *:</label>
+            <select id="itemCategory" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500">
+              <option value="Housekeeping & Linens">Housekeeping &amp; Linens</option>
+              <option value="Guest Amenities & Toiletries">Guest Amenities &amp; Toiletries</option>
+              <option value="Food & Beverage">Food &amp; Beverage</option>
+              <option value="Bar & Beverages">Bar &amp; Beverages</option>
+              <option value="Front Office & Stationery">Front Office &amp; Stationery</option>
+              <option value="Maintenance & Engineering">Maintenance &amp; Engineering</option>
+              <option value="Cleaning & Chemicals">Cleaning &amp; Chemicals</option>
+              <option value="Spa & Wellness">Spa &amp; Wellness</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Item Name *:</label>
+          <input type="text" id="itemName" required placeholder="e.g. King Size Bed Sheet 400TC White" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Unit of Measure *:</label>
+            <select id="itemUnit" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+              <option value="Pcs">Pcs</option>
+              <option value="Bottles">Bottles</option>
+              <option value="Bags">Bags</option>
+              <option value="Boxes">Boxes</option>
+              <option value="Packs">Packs</option>
+              <option value="Reams">Reams</option>
+              <option value="Cans">Cans</option>
+              <option value="Drums">Drums</option>
+              <option value="Kg">Kg</option>
+              <option value="Liters">Liters</option>
+              <option value="Tins">Tins</option>
+              <option value="Cards">Cards</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Min Stock Alert Level *:</label>
+            <input type="number" id="itemMinStock" min="0" required placeholder="e.g. 20" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Unit Purchase Cost *:</label>
+            <input type="number" id="itemUnitCost" min="0" step="0.01" required placeholder="0.00" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <!-- Initial Stock per Property -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <label class="block font-bold text-slate-800 mb-2 uppercase text-[11px] tracking-wider">Initial Stock Quantities Across Properties:</label>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <span class="text-slate-500 text-[11px] block font-medium">Central Depot:</span>
+              <input type="number" id="itemCentralStock" min="0" value="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-center font-bold">
+            </div>
+            <div>
+              <span class="text-blue-600 text-[11px] block font-medium">Deneb Hotel:</span>
+              <input type="number" id="itemDenebStock" min="0" value="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-center font-bold">
+            </div>
+            <div>
+              <span class="text-purple-600 text-[11px] block font-medium">Pollux Hotel:</span>
+              <input type="number" id="itemPolluxStock" min="0" value="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-center font-bold">
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Primary Supplier:</label>
+            <select id="itemSupplier" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+              <option value="">-- None / Direct --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Storage Location / Bin:</label>
+            <input type="text" id="itemStorageLocation" placeholder="e.g. Aisle 2 - Shelf B" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100">
+          <button type="button" onclick="app.closeModal('itemModal')" class="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button type="submit" id="saveItemBtn" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold shadow">Save Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. STOCK IN (PURCHASE / RECEIVING) MODAL -->
+  <div id="stockInModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeModal('stockInModal')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full z-10 border border-slate-200">
+      <div class="bg-emerald-700 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <h3 class="text-base font-bold flex items-center">
+          <i class="fa-solid fa-circle-down mr-2"></i> Stock In (Receive / Purchase)
+        </h3>
+        <button onclick="app.closeModal('stockInModal')" class="text-emerald-200 hover:text-white text-lg">&times;</button>
+      </div>
+      <form id="stockInForm" onsubmit="app.handleStockInSubmit(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Select Item *:</label>
+          <select id="stockInItemId" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium">
+            <!-- Populated via JS -->
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Receiving Store *:</label>
+            <select id="stockInDest" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold">
+              <option value="Central Warehouse">Central Warehouse (Depot)</option>
+              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
+              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Quantity Received *:</label>
+            <input type="number" id="stockInQty" min="1" required placeholder="Qty" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Unit Cost (Optional update):</label>
+            <input type="number" id="stockInUnitPrice" step="0.01" min="0" placeholder="e.g. 450" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Invoice / PO Reference:</label>
+            <input type="text" id="stockInRef" placeholder="e.g. PO-2026-99" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Supplier / Vendor:</label>
+            <select id="stockInSupplier" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+              <option value="">-- Direct Supplier --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Received By (Staff):</label>
+            <input type="text" id="stockInStaff" placeholder="Staff Name" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Notes / Delivery Condition:</label>
+          <input type="text" id="stockInNotes" placeholder="e.g. Received in good order, batch verified" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        </div>
+
+        <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+          <button type="button" onclick="app.closeModal('stockInModal')" class="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600">Cancel</button>
+          <button type="submit" id="stockInBtn" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow">Record Stock In</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. STOCK OUT (DISBURSEMENT TO DEPT) MODAL -->
+  <div id="stockOutModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeModal('stockOutModal')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full z-10 border border-slate-200">
+      <div class="bg-amber-700 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <h3 class="text-base font-bold flex items-center">
+          <i class="fa-solid fa-circle-up mr-2"></i> Stock Out (Disburse to Department)
+        </h3>
+        <button onclick="app.closeModal('stockOutModal')" class="text-amber-200 hover:text-white text-lg">&times;</button>
+      </div>
+      <form id="stockOutForm" onsubmit="app.handleStockOutSubmit(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Select Item *:</label>
+          <select id="stockOutItemId" required onchange="app.updateStockOutItemInfo()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium">
+            <!-- Populated via JS -->
+          </select>
+          <div id="stockOutAvailInfo" class="mt-1 text-[11px] text-slate-500 font-semibold"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Source Store *:</label>
+            <select id="stockOutSource" required onchange="app.updateStockOutItemInfo()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold">
+              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
+              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
+              <option value="Central Warehouse">Central Warehouse</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Quantity to Disburse *:</label>
+            <input type="number" id="stockOutQty" min="1" required placeholder="Qty" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Destination Department *:</label>
+            <select id="stockOutDept" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+              <!-- Populated via JS -->
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Requisition # / Ref:</label>
+            <input type="text" id="stockOutRef" placeholder="e.g. REQ-552" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Requested By (Staff / Dept Head):</label>
+            <input type="text" id="stockOutRequester" placeholder="e.g. Executive Housekeeper" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Purpose / Room / Event:</label>
+            <input type="text" id="stockOutNotes" placeholder="e.g. Banquet function / Floor 4 replenishment" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+          <button type="button" onclick="app.closeModal('stockOutModal')" class="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600">Cancel</button>
+          <button type="submit" id="stockOutBtn" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold shadow">Disburse Stock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. INTER-HOTEL TRANSFER MODAL -->
+  <div id="transferModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeModal('transferModal')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full z-10 border border-slate-200">
+      <div class="bg-blue-700 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <h3 class="text-base font-bold flex items-center">
+          <i class="fa-solid fa-right-left mr-2"></i> Inter-Property Stock Transfer
+        </h3>
+        <button onclick="app.closeModal('transferModal')" class="text-blue-200 hover:text-white text-lg">&times;</button>
+      </div>
+      <form id="transferForm" onsubmit="app.handleTransferSubmit(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Select Item *:</label>
+          <select id="transferItemId" required onchange="app.updateTransferItemInfo()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium">
+            <!-- Populated via JS -->
+          </select>
+          <div id="transferAvailInfo" class="mt-1 text-[11px] text-slate-500 font-semibold"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Transfer From (Source) *:</label>
+            <select id="transferSource" required onchange="app.updateTransferItemInfo()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold">
+              <option value="Central Warehouse">Central Warehouse</option>
+              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
+              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Transfer To (Destination) *:</label>
+            <select id="transferDest" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold">
+              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
+              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
+              <option value="Central Warehouse">Central Warehouse</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Quantity to Transfer *:</label>
+            <input type="number" id="transferQty" min="1" required placeholder="Qty" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Transfer Waybill / Ref #:</label>
+            <input type="text" id="transferRef" placeholder="e.g. TRF-109" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Authorized By / Driver / Notes:</label>
+          <input type="text" id="transferNotes" placeholder="e.g. Inter-hotel van shuttle delivery" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        </div>
+
+        <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+          <button type="button" onclick="app.closeModal('transferModal')" class="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600">Cancel</button>
+          <button type="submit" id="transferBtn" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow">Execute Transfer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. AUDIT ADJUSTMENT MODAL -->
+  <div id="adjustmentModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeModal('adjustmentModal')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full z-10 border border-slate-200">
+      <div class="bg-purple-800 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <h3 class="text-base font-bold flex items-center">
+          <i class="fa-solid fa-sliders mr-2"></i> Physical Audit Stock Adjustment
+        </h3>
+        <button onclick="app.closeModal('adjustmentModal')" class="text-purple-200 hover:text-white text-lg">&times;</button>
+      </div>
+      <form id="adjustmentForm" onsubmit="app.handleAdjustmentSubmit(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Select Item *:</label>
+          <select id="adjItemId" required onchange="app.updateAdjustmentItemInfo()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium">
+            <!-- Populated via JS -->
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Location to Audit *:</label>
+            <select id="adjLocation" required onchange="app.updateAdjustmentItemInfo()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold">
+              <option value="Central Warehouse">Central Warehouse</option>
+              <option value="Deneb Hotel Store">Deneb Hotel Store</option>
+              <option value="Pollux Hotel Store">Pollux Hotel Store</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Actual Physical Count *:</label>
+            <input type="number" id="adjCountedQty" min="0" required placeholder="Counted Qty" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold">
+          </div>
+        </div>
+
+        <div id="adjDiscrepancyInfo" class="p-3 bg-slate-50 rounded-lg border border-slate-200 text-slate-600 font-medium">
+          Select item &amp; location to compare current system stock with physical count.
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Audit Reason / Discrepancy Note *:</label>
+          <select id="adjReason" required class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-2">
+            <option value="Physical Cycle Count Reconciled">Physical Cycle Count Reconciled</option>
+            <option value="Damaged Stock Written Off">Damaged Stock Written Off</option>
+            <option value="Expired / Past Best-By Date">Expired / Past Best-By Date</option>
+            <option value="Shrinkage / Unaccounted Discrepancy">Shrinkage / Unaccounted Discrepancy</option>
+            <option value="Previous Data Entry Correction">Previous Data Entry Correction</option>
+          </select>
+          <input type="text" id="adjNotes" placeholder="Additional audit notes (Auditor name, recount details)" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        </div>
+
+        <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+          <button type="button" onclick="app.closeModal('adjustmentModal')" class="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600">Cancel</button>
+          <button type="submit" id="adjBtn" class="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-lg font-bold shadow">Save Adjustment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. BARCODE LABEL VIEWER & PRINT MODAL -->
+  <div id="barcodeModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeModal('barcodeModal')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full z-10 border border-slate-200 overflow-hidden">
+      <div class="bg-slate-900 text-white px-5 py-3 flex items-center justify-between no-print">
+        <span class="text-xs font-bold uppercase tracking-wider text-amber-400">Barcode Label Generator</span>
+        <button onclick="app.closeModal('barcodeModal')" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      
+      <!-- Printable Label Area -->
+      <div id="printableBarcodeArea" class="p-6 text-center bg-white">
+        <div class="border-2 border-dashed border-slate-400 rounded-xl p-4 bg-white">
+          <div class="text-[10px] font-extrabold tracking-widest text-slate-500 uppercase">DENEB &amp; POLLUX HOTELS</div>
+          <h4 id="barcodeLabelName" class="text-sm font-bold text-slate-900 mt-1 line-clamp-1">--</h4>
+          <p id="barcodeLabelCategory" class="text-[10px] text-slate-500 font-medium">--</p>
+          
+          <div class="my-3 flex justify-center">
+            <svg id="barcodeSvg" class="w-full max-w-[240px]"></svg>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] font-bold text-slate-700 pt-2 border-t border-slate-200">
+            <span id="barcodeLabelSku" class="font-mono">--</span>
+            <span id="barcodeLabelCost">--</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-2 no-print">
+        <button onclick="app.closeModal('barcodeModal')" class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600">Close</button>
+        <button onclick="window.print()" class="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 shadow">
+          <i class="fa-solid fa-print"></i>
+          <span>Print Label</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. CAMERA BARCODE / QR SCANNER MODAL -->
+  <div id="scannerModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeScannerModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full z-10 border border-slate-200 overflow-hidden">
+      <div class="bg-indigo-900 text-white px-5 py-3 flex items-center justify-between">
+        <h3 class="text-xs font-bold uppercase tracking-wider flex items-center">
+          <i class="fa-solid fa-barcode text-amber-400 mr-2 text-sm"></i> Live Camera Barcode Scanner
+        </h3>
+        <button onclick="app.closeScannerModal()" class="text-indigo-200 hover:text-white">&times;</button>
+      </div>
+      
+      <div class="p-4 space-y-3">
+        <div id="scannerViewport" class="rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center text-slate-400 text-xs">
+          <!-- Html5Qrcode renders here -->
+        </div>
+        <p class="text-[11px] text-slate-500 text-center">Point your camera at any item SKU barcode or product QR code.</p>
+        
+        <!-- Manual Input Fallback -->
+        <div class="pt-2 border-t border-slate-100 flex gap-2">
+          <input type="text" id="manualBarcodeInput" placeholder="Or type SKU / Code manually..." class="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg uppercase">
+          <button onclick="app.handleManualScanSubmit()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg">Lookup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. ADD SUPPLIER MODAL -->
+  <div id="supplierModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="modal-backdrop fixed inset-0" onclick="app.closeModal('supplierModal')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full z-10 border border-slate-200">
+      <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <h3 class="text-base font-bold flex items-center">
+          <i class="fa-solid fa-truck-ramp-box text-amber-400 mr-2"></i> Add / Edit Supplier
+        </h3>
+        <button onclick="app.closeModal('supplierModal')" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+      <form id="supplierForm" onsubmit="app.handleSupplierFormSubmit(event)" class="p-6 space-y-4 text-xs">
+        <input type="hidden" id="supplierId">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Company / Vendor Name *:</label>
+          <input type="text" id="supplierName" required placeholder="e.g. Apex Hospitality Linens Ltd" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Contact Person:</label>
+            <input type="text" id="supplierContact" placeholder="Name" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Phone Number:</label>
+            <input type="text" id="supplierPhone" placeholder="+91 ..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          </div>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Email Address:</label>
+          <input type="email" id="supplierEmail" placeholder="orders@vendor.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Categories Supplied:</label>
+          <input type="text" id="supplierCategories" placeholder="e.g. Housekeeping, Linens, Towels" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Address / Notes:</label>
+          <input type="text" id="supplierAddress" placeholder="Address, city, payment terms" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        </div>
+        <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+          <button type="button" onclick="app.closeModal('supplierModal')" class="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600">Cancel</button>
+          <button type="submit" id="saveSupplierBtn" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold shadow">Save Supplier</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- GLOBAL LOADING OVERLAY -->
+  <div id="loadingOverlay" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-6 shadow-2xl flex items-center space-x-4 max-w-sm border border-slate-200">
+      <div class="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+      <div>
+        <h4 id="loadingTitle" class="text-sm font-bold text-slate-800">Processing Request...</h4>
+        <p id="loadingSubtitle" class="text-xs text-slate-500">Communicating with Google Sheets database</p>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>

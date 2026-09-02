@@ -1,0 +1,1508 @@
+<script>
+/**
+ * DENEB & POLLUX HOTELS - IMS CLIENT APPLICATION LOGIC
+ */
+
+const app = {
+  state: {
+    dbInfo: {},
+    metrics: {},
+    items: [],
+    suppliers: [],
+    departments: [],
+    locations: [],
+    settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'Deneb & Pollux Hotels' },
+    recentTransactions: [],
+    activeTab: 'dashboard',
+    propertyFilter: 'ALL',
+    categoryChart: null,
+    html5QrScanner: null
+  },
+
+  // Initialize App
+  init: function() {
+    this.loadInitialData();
+  },
+
+  // Check if running inside Google Apps Script environment
+  isGasEnv: function() {
+    return typeof google !== 'undefined' && google.script && google.script.run;
+  },
+
+  // Show Global Loading
+  showLoading: function(title, subtitle) {
+    const el = document.getElementById('loadingOverlay');
+    if (el) {
+      if (title) document.getElementById('loadingTitle').innerText = title;
+      if (subtitle) document.getElementById('loadingSubtitle').innerText = subtitle;
+      el.classList.remove('hidden');
+    }
+  },
+
+  hideLoading: function() {
+    const el = document.getElementById('loadingOverlay');
+    if (el) el.classList.add('hidden');
+    const refreshIcon = document.getElementById('refreshIcon');
+    if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+  },
+
+  // Toast System
+  showToast: function(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast-enter pointer-events-auto px-4 py-3 rounded-xl shadow-xl text-xs font-semibold flex items-center space-x-2.5 max-w-sm border ${
+      type === 'success' ? 'bg-emerald-900 text-emerald-100 border-emerald-700' :
+      type === 'error' ? 'bg-rose-900 text-rose-100 border-rose-700' :
+      'bg-slate-900 text-slate-100 border-slate-700'
+    }`;
+
+    const icon = type === 'success' ? 'fa-circle-check text-emerald-400' :
+                 type === 'error' ? 'fa-circle-exclamation text-rose-400' :
+                 'fa-circle-info text-amber-400';
+
+    toast.innerHTML = `
+      <i class="fa-solid ${icon} text-base flex-shrink-0"></i>
+      <div class="flex-1">${message}</div>
+      <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white">&times;</button>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+      if (toast.parentElement) toast.remove();
+    }, 4500);
+  },
+
+  // Load Initial Data from Backend
+  loadInitialData: function(isRefresh = false) {
+    const refreshIcon = document.getElementById('refreshIcon');
+    if (refreshIcon) refreshIcon.classList.add('fa-spin');
+    
+    if (isRefresh) {
+      this.showToast('Refreshing inventory from Google Sheets...', 'info');
+    }
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(response) {
+          app.handleInitialDataSuccess(response);
+          if (isRefresh) app.showToast('Database up to date!');
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Error loading database: ' + err.message, 'error');
+        })
+        .getInitialData();
+    } else {
+      // Local preview mock fallback
+      console.warn('Google Apps Script environment not detected. Using sample mock database.');
+      setTimeout(() => {
+        app.handleInitialDataSuccess(app.getMockData());
+      }, 300);
+    }
+  },
+
+  handleInitialDataSuccess: function(data) {
+    this.hideLoading();
+    if (!data) return;
+
+    this.state.dbInfo = data.dbInfo || {};
+    this.state.metrics = data.metrics || {};
+    this.state.items = data.items || [];
+    this.state.suppliers = data.suppliers || [];
+    this.state.departments = data.departments || [];
+    this.state.locations = data.locations || [];
+    this.state.settings = data.settings || { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'Deneb & Pollux Hotels' };
+    this.state.recentTransactions = data.recentTransactions || [];
+
+    // Update Nav Count
+    const navBadge = document.getElementById('navTotalItemsBadge');
+    if (navBadge) navBadge.innerText = this.state.items.length;
+
+    // Update Google Sheet links
+    this.updateGoogleSheetLinks();
+
+    // Populate dropdowns across modals
+    this.populateAllSelectDropdowns();
+
+    // Render components
+    this.renderDashboard();
+    this.filterCatalog();
+    this.filterTransactions();
+    this.renderSuppliers();
+    this.renderDepartmentsAndLocations();
+    this.renderSettingsTab();
+  },
+
+  updateGoogleSheetLinks: function() {
+    const sheetUrl = this.state.dbInfo.url || '#';
+    const sheetId = this.state.dbInfo.id || '--';
+    const sheetName = this.state.dbInfo.name || 'Deneb & Pollux Hotels Database';
+
+    const headerLink = document.getElementById('openSheetBtn');
+    if (headerLink) {
+      headerLink.href = sheetUrl;
+      if (!this.state.dbInfo.url) headerLink.classList.add('hidden');
+      else headerLink.classList.remove('hidden');
+    }
+
+    const settingsLink = document.getElementById('settingsDirectSheetLink');
+    if (settingsLink) settingsLink.href = sheetUrl;
+
+    const nameEl = document.getElementById('settingsDbName');
+    if (nameEl) nameEl.innerText = sheetName;
+
+    const idEl = document.getElementById('settingsDbId');
+    if (idEl) idEl.innerText = sheetId;
+  },
+
+  // Number & Currency Formatters
+  formatCurrency: function(amount) {
+    const symbol = this.state.settings.CURRENCY_SYMBOL || '₹';
+    const num = Number(amount) || 0;
+    return symbol + ' ' + num.toLocaleString();
+  },
+
+  formatNumber: function(amount) {
+    return (Number(amount) || 0).toLocaleString();
+  },
+
+  // TAB NAVIGATION
+  switchTab: function(tabId) {
+    this.state.activeTab = tabId;
+
+    // Update Nav Buttons
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach(btn => {
+      btn.className = 'tab-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/50 flex items-center space-x-2 transition';
+    });
+
+    const activeBtn = document.getElementById('tabBtn-' + tabId);
+    if (activeBtn) {
+      activeBtn.className = 'tab-btn px-3 py-1.5 rounded-lg text-amber-400 bg-slate-800/80 flex items-center space-x-2 transition font-semibold';
+    }
+
+    // Toggle Content Panes
+    const panes = document.querySelectorAll('.tab-pane');
+    panes.forEach(p => p.classList.add('hidden'));
+
+    const targetPane = document.getElementById('tabContent-' + tabId);
+    if (targetPane) {
+      targetPane.classList.remove('hidden');
+    }
+
+    // Trigger Chart Resize if Dashboard
+    if (tabId === 'dashboard' && this.state.categoryChart) {
+      this.state.categoryChart.resize();
+    }
+  },
+
+  handlePropertyFilterChange: function(propertyCode) {
+    this.state.propertyFilter = propertyCode;
+    this.filterCatalog();
+    this.filterTransactions();
+    this.showToast(`View switched to: ${propertyCode === 'ALL' ? 'All Properties' : propertyCode + ' Store'}`);
+  },
+
+  // ==========================================
+  // DASHBOARD RENDERING
+  // ==========================================
+  renderDashboard: function() {
+    const m = this.state.metrics || {};
+    const sym = this.state.settings.CURRENCY_SYMBOL || '₹';
+
+    document.getElementById('kpiCurrencySymbol').innerText = sym;
+    document.getElementById('kpiTotalValuation').innerText = this.formatCurrency(m.totalValuation || 0);
+    document.getElementById('kpiTotalSkus').innerText = this.formatNumber(m.totalSkus || 0);
+    document.getElementById('kpiTotalUnits').innerText = this.formatNumber(m.totalUnits || 0);
+    document.getElementById('kpiLowStockCount').innerText = this.formatNumber((m.lowStockCount || 0) + (m.outOfStockCount || 0));
+
+    // Today's summary
+    const today = m.todaySummary || { txnCount: 0, stockIn: 0, stockOut: 0 };
+    document.getElementById('kpiTodayTxns').innerText = this.formatNumber(today.txnCount || 0);
+    document.getElementById('kpiStockInToday').innerText = `+${today.stockIn || 0} In`;
+    document.getElementById('kpiStockOutToday').innerText = `-${today.stockOut || 0} Out`;
+
+    // Multi-Property Cards
+    const locs = m.locations || { central: { units: 0, valuation: 0 }, deneb: { units: 0, valuation: 0 }, pollux: { units: 0, valuation: 0 } };
+    document.getElementById('cardCentralValuation').innerText = this.formatCurrency(locs.central.valuation || 0);
+    document.getElementById('cardCentralUnits').innerText = `${this.formatNumber(locs.central.units || 0)} units`;
+
+    document.getElementById('cardDenebValuation').innerText = this.formatCurrency(locs.deneb.valuation || 0);
+    document.getElementById('cardDenebUnits').innerText = `${this.formatNumber(locs.deneb.units || 0)} units`;
+
+    document.getElementById('cardPolluxValuation').innerText = this.formatCurrency(locs.pollux.valuation || 0);
+    document.getElementById('cardPolluxUnits').innerText = `${this.formatNumber(locs.pollux.units || 0)} units`;
+
+    // Render Category Doughnut Chart
+    this.renderCategoryChart(m.categoryBreakdown || {});
+
+    // Render Low Stock Alert Table
+    this.renderLowStockTable(m.lowStockItems || []);
+
+    // Render Recent Transactions Table
+    this.renderDashboardTxnTable(this.state.recentTransactions.slice(0, 6));
+  },
+
+  renderCategoryChart: function(categoryMap) {
+    const canvas = document.getElementById('categoryChart');
+    if (!canvas) return;
+
+    const labels = Object.keys(categoryMap);
+    const dataVals = labels.map(l => categoryMap[l].value || 0);
+
+    const colors = [
+      '#d97706', // amber
+      '#2563eb', // blue
+      '#7c3aed', // purple
+      '#059669', // emerald
+      '#dc2626', // red
+      '#0891b2', // cyan
+      '#4b5563', // slate
+      '#db2777'  // pink
+    ];
+
+    if (this.state.categoryChart) {
+      this.state.categoryChart.destroy();
+    }
+
+    const ctx = canvas.getContext('2d');
+    this.state.categoryChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: dataVals,
+          backgroundColor: colors.slice(0, labels.length),
+          borderWidth: 2,
+          borderColor: '#ffffff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              boxWidth: 10,
+              font: { size: 10, family: 'Plus Jakarta Sans' },
+              color: '#475569'
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const val = context.raw || 0;
+                return ` ${context.label}: ${app.formatCurrency(val)}`;
+              }
+            }
+          }
+        },
+        cutout: '68%'
+      }
+    });
+  },
+
+  renderLowStockTable: function(items) {
+    const tbody = document.getElementById('lowStockTableBody');
+    if (!tbody) return;
+
+    if (!items || items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-emerald-600 font-semibold"><i class="fa-solid fa-circle-check mr-1.5"></i>All items are above minimum stock levels!</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = items.map(item => {
+      const isOut = (Number(item.totalStock) || 0) === 0;
+      return `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-2.5">
+            <div class="font-bold text-slate-800">${item.name}</div>
+            <div class="text-[10px] text-slate-400 font-mono">${item.sku}</div>
+          </td>
+          <td class="py-2.5 text-slate-500">${item.category}</td>
+          <td class="py-2.5 text-center font-bold ${isOut ? 'text-rose-600' : 'text-amber-600'}">
+            ${item.totalStock} ${item.unit}
+          </td>
+          <td class="py-2.5 text-center text-slate-400 font-medium">
+            ${item.minStock} ${item.unit}
+          </td>
+          <td class="py-2.5 text-right">
+            <button onclick="app.quickRestock('${item.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded text-[10px] shadow-sm transition">
+              + Stock In
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  renderDashboardTxnTable: function(txns) {
+    const tbody = document.getElementById('dashboardTxnTableBody');
+    if (!tbody) return;
+
+    if (!txns || txns.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="py-4 text-center text-slate-400">No recent transactions recorded.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = txns.map(t => {
+      const typeBadge = this.getTypeBadge(t.type);
+      const timeStr = t.timestamp ? new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--';
+      return `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-2 font-mono text-[10px] text-slate-400">${t.id}</td>
+          <td class="py-2 text-slate-500">${timeStr}</td>
+          <td class="py-2">${typeBadge}</td>
+          <td class="py-2 font-semibold text-slate-800">${t.itemName}</td>
+          <td class="py-2 text-center font-bold text-slate-700">${t.quantity} ${t.unit || ''}</td>
+          <td class="py-2 text-slate-500">${t.sourceLocation || '--'}</td>
+          <td class="py-2 text-slate-500">${t.destLocation || '--'}</td>
+          <td class="py-2 text-slate-400">${t.performedBy || '--'}</td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  getTypeBadge: function(type) {
+    const t = String(type).toUpperCase();
+    if (t === 'STOCK_IN') {
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-arrow-down mr-1"></i>Stock In</span>`;
+    } else if (t === 'STOCK_OUT') {
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800"><i class="fa-solid fa-arrow-up mr-1"></i>Stock Out</span>`;
+    } else if (t === 'TRANSFER') {
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800"><i class="fa-solid fa-right-left mr-1"></i>Transfer</span>`;
+    } else {
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800"><i class="fa-solid fa-sliders mr-1"></i>Adjust</span>`;
+    }
+  },
+
+  // ==========================================
+  // INVENTORY CATALOG
+  // ==========================================
+  filterCatalogByLowStock: function() {
+    this.switchTab('inventory');
+    const filter = document.getElementById('catalogStockFilter');
+    if (filter) filter.value = 'LOW';
+    this.filterCatalog();
+  },
+
+  filterCatalog: function() {
+    const searchVal = (document.getElementById('catalogSearchInput')?.value || '').toLowerCase().trim();
+    const catVal = document.getElementById('catalogCategoryFilter')?.value || 'ALL';
+    const stockVal = document.getElementById('catalogStockFilter')?.value || 'ALL';
+    const propFilter = this.state.propertyFilter;
+
+    let items = this.state.items.filter(item => {
+      // Search match
+      const matchSearch = !searchVal || 
+        (item.name && item.name.toLowerCase().includes(searchVal)) ||
+        (item.sku && item.sku.toLowerCase().includes(searchVal)) ||
+        (item.category && item.category.toLowerCase().includes(searchVal)) ||
+        (item.supplier && item.supplier.toLowerCase().includes(searchVal));
+
+      if (!matchSearch) return false;
+
+      // Category match
+      if (catVal !== 'ALL' && item.category !== catVal) return false;
+
+      // Stock status filter
+      const total = Number(item.totalStock) || 0;
+      const min = Number(item.minStock) || 0;
+      if (stockVal === 'LOW' && (total > min || total === 0)) return false;
+      if (stockVal === 'OUT' && total !== 0) return false;
+      if (stockVal === 'OK' && total <= min) return false;
+
+      // Property specific non-zero check if selected
+      if (propFilter === 'CENTRAL' && stockVal !== 'ALL' && item.centralStock <= 0) return false;
+      if (propFilter === 'DENEB' && stockVal !== 'ALL' && item.denebStock <= 0) return false;
+      if (propFilter === 'POLLUX' && stockVal !== 'ALL' && item.polluxStock <= 0) return false;
+
+      return true;
+    });
+
+    this.renderCatalogTable(items);
+  },
+
+  renderCatalogTable: function(items) {
+    const tbody = document.getElementById('catalogTableBody');
+    const countLabel = document.getElementById('catalogCountLabel');
+    if (!tbody) return;
+
+    if (countLabel) countLabel.innerText = `Showing ${items.length} of ${this.state.items.length} items`;
+
+    if (!items || items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" class="py-12 text-center text-slate-400 font-medium">No items found matching the current search &amp; filters.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = items.map(item => {
+      const total = Number(item.totalStock) || 0;
+      const min = Number(item.minStock) || 0;
+      const isOut = total === 0;
+      const isLow = !isOut && total <= min;
+
+      let statusPill = isOut 
+        ? `<span class="inline-block w-2.5 h-2.5 rounded-full bg-rose-500" title="Out of Stock"></span>`
+        : isLow 
+        ? `<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" title="Low Stock Warning"></span>`
+        : `<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" title="Stock Healthy"></span>`;
+
+      return `
+        <tr class="hover:bg-slate-50/80 transition">
+          <!-- SKU / Barcode -->
+          <td class="py-3 px-4">
+            <div class="flex items-center space-x-1.5">
+              ${statusPill}
+              <button onclick="app.openBarcodeModal('${item.id}')" title="Click to view/print barcode" class="font-mono text-xs font-bold text-slate-800 hover:text-indigo-600 underline decoration-dashed decoration-slate-300">
+                ${item.sku}
+              </button>
+            </div>
+            <div class="text-[10px] text-slate-400 ml-4 font-mono">${item.id}</div>
+          </td>
+
+          <!-- Name & Category -->
+          <td class="py-3 px-4">
+            <div class="font-bold text-slate-800 text-xs sm:text-sm">${item.name}</div>
+            <div class="flex items-center space-x-2 text-[11px] text-slate-500 mt-0.5">
+              <span class="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded">${item.category}</span>
+              ${item.supplier ? `<span class="truncate max-w-[140px] text-slate-400"><i class="fa-solid fa-truck-ramp-box text-[9px] mr-1"></i>${item.supplier}</span>` : ''}
+            </div>
+          </td>
+
+          <!-- Property Stocks -->
+          <td class="py-3 px-3 text-center bg-slate-50/50 font-bold text-slate-700">${item.centralStock}</td>
+          <td class="py-3 px-3 text-center bg-blue-50/30 font-bold text-blue-700">${item.denebStock}</td>
+          <td class="py-3 px-3 text-center bg-purple-50/30 font-bold text-purple-700">${item.polluxStock}</td>
+
+          <!-- Total Stock -->
+          <td class="py-3 px-3 text-center font-extrabold text-sm ${isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-900'}">
+            ${item.totalStock} <span class="text-[10px] font-normal text-slate-400">${item.unit}</span>
+          </td>
+
+          <!-- Min Stock Alert -->
+          <td class="py-3 px-3 text-center text-slate-400 font-medium">
+            ${item.minStock}
+          </td>
+
+          <!-- Unit Cost -->
+          <td class="py-3 px-3 text-right text-slate-600 font-mono">
+            ${this.formatCurrency(item.unitCost)}
+          </td>
+
+          <!-- Total Valuation -->
+          <td class="py-3 px-4 text-right font-bold text-slate-800 font-mono">
+            ${this.formatCurrency(item.totalValue)}
+          </td>
+
+          <!-- Actions -->
+          <td class="py-3 px-4 text-center">
+            <div class="inline-flex items-center space-x-1">
+              <button onclick="app.quickRestock('${item.id}')" title="Stock In" class="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded transition">
+                <i class="fa-solid fa-circle-down"></i>
+              </button>
+              <button onclick="app.quickStockOut('${item.id}')" title="Stock Out / Disburse" class="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded transition">
+                <i class="fa-solid fa-circle-up"></i>
+              </button>
+              <button onclick="app.quickTransfer('${item.id}')" title="Transfer Store" class="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded transition">
+                <i class="fa-solid fa-right-left"></i>
+              </button>
+              <button onclick="app.openBarcodeModal('${item.id}')" title="Print Barcode" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition">
+                <i class="fa-solid fa-barcode"></i>
+              </button>
+              <button onclick="app.editItem('${item.id}')" title="Edit Item" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+              <button onclick="app.confirmDeleteItem('${item.id}')" title="Delete Item" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded transition">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  // ==========================================
+  // TRANSACTIONS & AUDIT
+  // ==========================================
+  filterTransactions: function() {
+    const searchVal = (document.getElementById('txnSearchInput')?.value || '').toLowerCase().trim();
+    const typeVal = document.getElementById('txnTypeFilter')?.value || 'ALL';
+
+    const filtered = this.state.recentTransactions.filter(t => {
+      if (typeVal !== 'ALL' && t.type !== typeVal) return false;
+      if (!searchVal) return true;
+
+      return (
+        (t.id && t.id.toLowerCase().includes(searchVal)) ||
+        (t.itemName && t.itemName.toLowerCase().includes(searchVal)) ||
+        (t.sku && t.sku.toLowerCase().includes(searchVal)) ||
+        (t.reference && t.reference.toLowerCase().includes(searchVal)) ||
+        (t.performedBy && t.performedBy.toLowerCase().includes(searchVal)) ||
+        (t.notes && t.notes.toLowerCase().includes(searchVal))
+      );
+    });
+
+    this.renderTransactionsTable(filtered);
+  },
+
+  renderTransactionsTable: function(txns) {
+    const tbody = document.getElementById('transactionsTableBody');
+    if (!tbody) return;
+
+    if (!txns || txns.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" class="py-12 text-center text-slate-400 font-medium">No transaction records found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = txns.map(t => {
+      const typeBadge = this.getTypeBadge(t.type);
+      const dateFormatted = t.timestamp ? new Date(t.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--';
+
+      return `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="py-3 px-4 font-mono text-slate-500">${t.id}</td>
+          <td class="py-3 px-3 text-slate-500 whitespace-nowrap">${dateFormatted}</td>
+          <td class="py-3 px-3">${typeBadge}</td>
+          <td class="py-3 px-4">
+            <div class="font-bold text-slate-800">${t.itemName}</div>
+            <div class="text-[10px] text-slate-400 font-mono">${t.sku}</div>
+          </td>
+          <td class="py-3 px-3 text-center font-bold text-slate-800">${t.quantity} ${t.unit || ''}</td>
+          <td class="py-3 px-3 text-slate-600">${t.sourceLocation || '--'}</td>
+          <td class="py-3 px-3 text-slate-600">${t.destLocation || '--'}</td>
+          <td class="py-3 px-3 text-right font-mono font-bold text-slate-700">${this.formatCurrency(t.totalCost)}</td>
+          <td class="py-3 px-3 font-mono text-slate-500">${t.reference || '--'}</td>
+          <td class="py-3 px-4 text-slate-500">
+            <div class="font-semibold text-slate-700">${t.performedBy || 'Staff'}</div>
+            ${t.notes ? `<div class="text-[10px] text-slate-400 truncate max-w-[150px]">${t.notes}</div>` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  // ==========================================
+  // SUPPLIERS DIRECTORY
+  // ==========================================
+  renderSuppliers: function() {
+    const container = document.getElementById('suppliersGridContainer');
+    if (!container) return;
+
+    if (!this.state.suppliers || this.state.suppliers.length === 0) {
+      container.innerHTML = `<div class="col-span-3 text-center py-12 text-slate-400">No suppliers registered. Click "+ Add Supplier" to register vendors.</div>`;
+      return;
+    }
+
+    container.innerHTML = this.state.suppliers.map(sup => {
+      return `
+        <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-3 hover:border-slate-300 transition">
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-[10px] font-mono text-slate-400 font-bold">${sup.id}</span>
+              <h4 class="text-sm font-bold text-slate-900">${sup.name}</h4>
+              <p class="text-xs text-amber-600 font-medium">${sup.categorySupplied || 'General Supplier'}</p>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${sup.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
+              ${sup.status}
+            </span>
+          </div>
+
+          <div class="text-xs text-slate-500 space-y-1 pt-2 border-t border-slate-100">
+            ${sup.contactPerson ? `<div><i class="fa-solid fa-user text-slate-400 mr-2"></i>${sup.contactPerson}</div>` : ''}
+            ${sup.phone ? `<div><i class="fa-solid fa-phone text-slate-400 mr-2"></i>${sup.phone}</div>` : ''}
+            ${sup.email ? `<div><i class="fa-solid fa-envelope text-slate-400 mr-2"></i>${sup.email}</div>` : ''}
+            ${sup.address ? `<div><i class="fa-solid fa-location-dot text-slate-400 mr-2"></i>${sup.address}</div>` : ''}
+          </div>
+
+          <div class="pt-2 flex items-center justify-end space-x-2 border-t border-slate-100 text-xs">
+            <button onclick="app.editSupplier('${sup.id}')" class="text-slate-600 hover:text-slate-900 font-semibold px-2 py-1 rounded hover:bg-slate-100">Edit</button>
+            <button onclick="app.confirmDeleteSupplier('${sup.id}')" class="text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 rounded hover:bg-rose-50">Delete</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  // ==========================================
+  // DEPARTMENTS & LOCATIONS
+  // ==========================================
+  renderDepartmentsAndLocations: function() {
+    const deptTbody = document.getElementById('departmentsTableBody');
+    if (deptTbody && this.state.departments) {
+      deptTbody.innerHTML = this.state.departments.map(d => `
+        <tr class="hover:bg-slate-50">
+          <td class="py-2.5 font-bold text-slate-800">${d.name}</td>
+          <td class="py-2.5 text-slate-500">${d.propertyScope || 'Both Properties'}</td>
+          <td class="py-2.5 text-slate-600">${d.headOfDepartment || '--'}</td>
+        </tr>
+      `).join('');
+    }
+
+    const locTbody = document.getElementById('locationsTableBody');
+    if (locTbody && this.state.locations) {
+      locTbody.innerHTML = this.state.locations.map(l => `
+        <tr class="hover:bg-slate-50">
+          <td class="py-2.5 font-mono font-bold text-amber-600">${l.code}</td>
+          <td class="py-2.5 font-bold text-slate-800">${l.name}</td>
+          <td class="py-2.5 text-slate-500">${l.type}</td>
+        </tr>
+      `).join('');
+    }
+  },
+
+  // ==========================================
+  // SETTINGS TAB
+  // ==========================================
+  renderSettingsTab: function() {
+    const set = this.state.settings || {};
+    const hotelInput = document.getElementById('settingHotelName');
+    if (hotelInput) hotelInput.value = set.HOTEL_NAME || 'Deneb & Pollux Hotels';
+
+    const currInput = document.getElementById('settingCurrencySymbol');
+    if (currInput) currInput.value = set.CURRENCY_SYMBOL || '₹';
+  },
+
+  saveAppSettings: function() {
+    const name = document.getElementById('settingHotelName').value.trim();
+    const curr = document.getElementById('settingCurrencySymbol').value.trim();
+
+    this.showLoading('Saving settings...', 'Updating system preferences');
+    const newSettings = {
+      HOTEL_NAME: name,
+      CURRENCY_SYMBOL: curr
+    };
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function() {
+          app.hideLoading();
+          app.state.settings.HOTEL_NAME = name;
+          app.state.settings.CURRENCY_SYMBOL = curr;
+          app.renderDashboard();
+          app.filterCatalog();
+          app.showToast('Settings saved successfully!');
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Error saving settings: ' + err.message, 'error');
+        })
+        .saveSettings(newSettings);
+    } else {
+      this.hideLoading();
+      this.state.settings.HOTEL_NAME = name;
+      this.state.settings.CURRENCY_SYMBOL = curr;
+      this.renderDashboard();
+      this.showToast('Settings updated (local test mode)');
+    }
+  },
+
+  connectCustomSheet: function() {
+    const input = document.getElementById('customSheetInput');
+    const val = (input ? input.value : '').trim();
+
+    if (!val) {
+      this.showToast('Please enter a valid Google Sheet URL or ID.', 'error');
+      return;
+    }
+
+    this.showLoading('Connecting Google Sheet...', 'Validating permissions and initializing database tabs');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          if (res.success) {
+            app.showToast(res.message);
+            input.value = '';
+            app.loadInitialData(true);
+          } else {
+            app.showToast(res.error || 'Failed to connect sheet', 'error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Connection error: ' + err.message, 'error');
+        })
+        .connectCustomSpreadsheet(val);
+    } else {
+      this.hideLoading();
+      this.showToast('Google Sheet connection simulated in test mode.');
+    }
+  },
+
+  reseedDemoData: function() {
+    if (!confirm('Re-seed demo hotel inventory data into current spreadsheet? This will populate standard hotel catalog items.')) {
+      return;
+    }
+
+    this.showLoading('Refreshing demo data...', 'Inserting hotel catalog items');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          app.showToast('Sample hotel data re-seeded!');
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Error reseeding: ' + err.message, 'error');
+        })
+        .resetOrSeedDemoData();
+    } else {
+      this.hideLoading();
+      this.showToast('Demo data re-seeded (local mode)');
+    }
+  },
+
+  // ==========================================
+  // MODAL MANAGEMENT & FORMS
+  // ==========================================
+  openModal: function(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeModal: function(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.add('hidden');
+  },
+
+  populateAllSelectDropdowns: function() {
+    // Populate Category filter
+    const catFilter = document.getElementById('catalogCategoryFilter');
+    if (catFilter) {
+      const cats = [...new Set(this.state.items.map(i => i.category).filter(Boolean))];
+      catFilter.innerHTML = `<option value="ALL">All Categories (${cats.length})</option>` +
+        cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+
+    // Populate Item selectors for Stock In, Out, Transfer, Adjustment
+    const itemOptions = this.state.items.map(i => `<option value="${i.id}">${i.name} [${i.sku}] - Total: ${i.totalStock} ${i.unit}</option>`).join('');
+
+    ['stockInItemId', 'stockOutItemId', 'transferItemId', 'adjItemId'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = itemOptions;
+    });
+
+    // Populate Suppliers in Item & Stock In forms
+    const supOptions = `<option value="">-- None / Direct --</option>` +
+      this.state.suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+
+    ['itemSupplier', 'stockInSupplier'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = supOptions;
+    });
+
+    // Populate Departments in Stock Out form
+    const deptOptions = this.state.departments.map(d => `<option value="${d.name}">${d.name} (${d.propertyScope})</option>`).join('');
+    const stockOutDept = document.getElementById('stockOutDept');
+    if (stockOutDept) stockOutDept.innerHTML = deptOptions;
+  },
+
+  // ITEM MODAL
+  openItemModal: function(item = null) {
+    const title = document.getElementById('itemModalTitle');
+    const form = document.getElementById('itemForm');
+    form.reset();
+
+    if (item) {
+      title.innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-400 mr-2"></i> Edit Inventory Item`;
+      document.getElementById('itemId').value = item.id;
+      document.getElementById('itemSku').value = item.sku;
+      document.getElementById('itemName').value = item.name;
+      document.getElementById('itemCategory').value = item.category;
+      document.getElementById('itemUnit').value = item.unit;
+      document.getElementById('itemMinStock').value = item.minStock;
+      document.getElementById('itemUnitCost').value = item.unitCost;
+      document.getElementById('itemCentralStock').value = item.centralStock;
+      document.getElementById('itemDenebStock').value = item.denebStock;
+      document.getElementById('itemPolluxStock').value = item.polluxStock;
+      document.getElementById('itemSupplier').value = item.supplier || '';
+      document.getElementById('itemStorageLocation').value = item.storageLocation || '';
+    } else {
+      title.innerHTML = `<i class="fa-solid fa-box text-amber-400 mr-2"></i> Add New Inventory Item`;
+      document.getElementById('itemId').value = '';
+    }
+
+    this.openModal('itemModal');
+  },
+
+  editItem: function(itemId) {
+    const item = this.state.items.find(i => i.id === itemId);
+    if (item) this.openItemModal(item);
+  },
+
+  handleItemFormSubmit: function(e) {
+    e.preventDefault();
+    const itemData = {
+      id: document.getElementById('itemId').value,
+      sku: document.getElementById('itemSku').value.trim(),
+      name: document.getElementById('itemName').value.trim(),
+      category: document.getElementById('itemCategory').value,
+      unit: document.getElementById('itemUnit').value,
+      minStock: Number(document.getElementById('itemMinStock').value) || 0,
+      unitCost: Number(document.getElementById('itemUnitCost').value) || 0,
+      centralStock: Number(document.getElementById('itemCentralStock').value) || 0,
+      denebStock: Number(document.getElementById('itemDenebStock').value) || 0,
+      polluxStock: Number(document.getElementById('itemPolluxStock').value) || 0,
+      supplier: document.getElementById('itemSupplier').value,
+      storageLocation: document.getElementById('itemStorageLocation').value.trim()
+    };
+
+    this.showLoading('Saving Item...', 'Updating catalog in Google Sheets');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          app.closeModal('itemModal');
+          app.showToast('Item saved successfully: ' + itemData.name);
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Error saving item: ' + err.message, 'error');
+        })
+        .saveItem(itemData);
+    } else {
+      this.hideLoading();
+      this.closeModal('itemModal');
+      this.showToast('Item saved (local mode)');
+    }
+  },
+
+  confirmDeleteItem: function(itemId) {
+    const item = this.state.items.find(i => i.id === itemId);
+    const name = item ? item.name : itemId;
+
+    if (!confirm(`Are you sure you want to delete "${name}" from inventory?`)) return;
+
+    this.showLoading('Deleting item...', 'Removing row from database');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          app.showToast('Item removed from catalog');
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Delete error: ' + err.message, 'error');
+        })
+        .deleteItem(itemId);
+    } else {
+      this.hideLoading();
+      this.showToast('Item deleted (local mode)');
+    }
+  },
+
+  // STOCK IN MODAL
+  openStockInModal: function(defaultItemId = null) {
+    document.getElementById('stockInForm').reset();
+    if (defaultItemId) {
+      document.getElementById('stockInItemId').value = defaultItemId;
+    }
+    this.openModal('stockInModal');
+  },
+
+  quickRestock: function(itemId) {
+    this.openStockInModal(itemId);
+  },
+
+  handleStockInSubmit: function(e) {
+    e.preventDefault();
+    const data = {
+      type: 'STOCK_IN',
+      itemId: document.getElementById('stockInItemId').value,
+      destLocation: document.getElementById('stockInDest').value,
+      sourceLocation: document.getElementById('stockInSupplier').value || 'Supplier Direct',
+      quantity: Number(document.getElementById('stockInQty').value),
+      unitPrice: Number(document.getElementById('stockInUnitPrice').value) || 0,
+      reference: document.getElementById('stockInRef').value.trim(),
+      performedBy: document.getElementById('stockInStaff').value.trim() || 'Inventory Staff',
+      notes: document.getElementById('stockInNotes').value.trim()
+    };
+
+    this.showLoading('Recording Stock In...', 'Updating property stock and ledger');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          app.closeModal('stockInModal');
+          app.showToast('Stock received and added to ' + data.destLocation);
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Stock In error: ' + err.message, 'error');
+        })
+        .processStockTransaction(data);
+    } else {
+      this.hideLoading();
+      this.closeModal('stockInModal');
+      this.showToast('Stock In recorded (local mode)');
+    }
+  },
+
+  // STOCK OUT MODAL
+  openStockOutModal: function(defaultItemId = null) {
+    document.getElementById('stockOutForm').reset();
+    if (defaultItemId) {
+      document.getElementById('stockOutItemId').value = defaultItemId;
+    }
+    this.updateStockOutItemInfo();
+    this.openModal('stockOutModal');
+  },
+
+  quickStockOut: function(itemId) {
+    this.openStockOutModal(itemId);
+  },
+
+  updateStockOutItemInfo: function() {
+    const itemId = document.getElementById('stockOutItemId').value;
+    const sourceLoc = document.getElementById('stockOutSource').value;
+    const item = this.state.items.find(i => i.id === itemId);
+    const infoEl = document.getElementById('stockOutAvailInfo');
+
+    if (!item || !infoEl) return;
+
+    let available = 0;
+    if (sourceLoc.includes('Central')) available = item.centralStock;
+    else if (sourceLoc.includes('Deneb')) available = item.denebStock;
+    else if (sourceLoc.includes('Pollux')) available = item.polluxStock;
+
+    infoEl.innerHTML = `Available in <span class="text-slate-800 font-bold">${sourceLoc}</span>: <span class="font-bold text-amber-600">${available} ${item.unit}</span> (Total in hotel chain: ${item.totalStock})`;
+  },
+
+  handleStockOutSubmit: function(e) {
+    e.preventDefault();
+    const itemId = document.getElementById('stockOutItemId').value;
+    const sourceLoc = document.getElementById('stockOutSource').value;
+    const qty = Number(document.getElementById('stockOutQty').value);
+
+    const item = this.state.items.find(i => i.id === itemId);
+    if (item) {
+      let available = 0;
+      if (sourceLoc.includes('Central')) available = item.centralStock;
+      else if (sourceLoc.includes('Deneb')) available = item.denebStock;
+      else if (sourceLoc.includes('Pollux')) available = item.polluxStock;
+
+      if (available < qty) {
+        this.showToast(`Insufficient stock in ${sourceLoc}. Available: ${available}, Requested: ${qty}`, 'error');
+        return;
+      }
+    }
+
+    const data = {
+      type: 'STOCK_OUT',
+      itemId: itemId,
+      sourceLocation: sourceLoc,
+      destLocation: document.getElementById('stockOutDept').value,
+      quantity: qty,
+      reference: document.getElementById('stockOutRef').value.trim(),
+      performedBy: document.getElementById('stockOutRequester').value.trim() || 'Dept Staff',
+      notes: document.getElementById('stockOutNotes').value.trim()
+    };
+
+    this.showLoading('Disbursing Stock...', 'Updating inventory ledger');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          app.closeModal('stockOutModal');
+          app.showToast(`Issued ${data.quantity} units to ${data.destLocation}`);
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Stock Out error: ' + err.message, 'error');
+        })
+        .processStockTransaction(data);
+    } else {
+      this.hideLoading();
+      this.closeModal('stockOutModal');
+      this.showToast('Stock Out completed (local mode)');
+    }
+  },
+
+  // TRANSFER MODAL
+  openTransferModal: function(defaultItemId = null) {
+    document.getElementById('transferForm').reset();
+    if (defaultItemId) {
+      document.getElementById('transferItemId').value = defaultItemId;
+    }
+    this.updateTransferItemInfo();
+    this.openModal('transferModal');
+  },
+
+  quickTransfer: function(itemId) {
+    this.openTransferModal(itemId);
+  },
+
+  updateTransferItemInfo: function() {
+    const itemId = document.getElementById('transferItemId').value;
+    const sourceLoc = document.getElementById('transferSource').value;
+    const item = this.state.items.find(i => i.id === itemId);
+    const infoEl = document.getElementById('transferAvailInfo');
+
+    if (!item || !infoEl) return;
+
+    let available = 0;
+    if (sourceLoc.includes('Central')) available = item.centralStock;
+    else if (sourceLoc.includes('Deneb')) available = item.denebStock;
+    else if (sourceLoc.includes('Pollux')) available = item.polluxStock;
+
+    infoEl.innerHTML = `Available in source (<span class="font-bold text-slate-800">${sourceLoc}</span>): <span class="font-bold text-blue-600">${available} ${item.unit}</span>`;
+  },
+
+  handleTransferSubmit: function(e) {
+    e.preventDefault();
+    const itemId = document.getElementById('transferItemId').value;
+    const fromLoc = document.getElementById('transferSource').value;
+    const toLoc = document.getElementById('transferDest').value;
+    const qty = Number(document.getElementById('transferQty').value);
+
+    if (fromLoc === toLoc) {
+      this.showToast('Source and Destination stores cannot be identical.', 'error');
+      return;
+    }
+
+    const item = this.state.items.find(i => i.id === itemId);
+    if (item) {
+      let available = 0;
+      if (fromLoc.includes('Central')) available = item.centralStock;
+      else if (fromLoc.includes('Deneb')) available = item.denebStock;
+      else if (fromLoc.includes('Pollux')) available = item.polluxStock;
+
+      if (available < qty) {
+        this.showToast(`Insufficient stock in ${fromLoc}. Available: ${available}, Transfer: ${qty}`, 'error');
+        return;
+      }
+    }
+
+    const data = {
+      type: 'TRANSFER',
+      itemId: itemId,
+      sourceLocation: fromLoc,
+      destLocation: toLoc,
+      quantity: qty,
+      reference: document.getElementById('transferRef').value.trim(),
+      performedBy: 'Logistics Coord',
+      notes: document.getElementById('transferNotes').value.trim()
+    };
+
+    this.showLoading('Transferring Stock...', 'Moving stock between property hubs');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          app.closeModal('transferModal');
+          app.showToast(`Transferred ${qty} units from ${fromLoc} to ${toLoc}`);
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Transfer error: ' + err.message, 'error');
+        })
+        .processStockTransaction(data);
+    } else {
+      this.hideLoading();
+      this.closeModal('transferModal');
+      this.showToast('Transfer completed (local mode)');
+    }
+  },
+
+  // ADJUSTMENT MODAL
+  openAdjustmentModal: function(defaultItemId = null) {
+    document.getElementById('adjustmentForm').reset();
+    if (defaultItemId) {
+      document.getElementById('adjItemId').value = defaultItemId;
+    }
+    this.updateAdjustmentItemInfo();
+    this.openModal('adjustmentModal');
+  },
+
+  updateAdjustmentItemInfo: function() {
+    const itemId = document.getElementById('adjItemId').value;
+    const loc = document.getElementById('adjLocation').value;
+    const item = this.state.items.find(i => i.id === itemId);
+    const infoEl = document.getElementById('adjDiscrepancyInfo');
+
+    if (!item || !infoEl) return;
+
+    let current = 0;
+    if (loc.includes('Central')) current = item.centralStock;
+    else if (loc.includes('Deneb')) current = item.denebStock;
+    else if (loc.includes('Pollux')) current = item.polluxStock;
+
+    infoEl.innerHTML = `System recorded stock at <span class="font-bold text-slate-800">${loc}</span>: <span class="font-bold text-purple-700">${current} ${item.unit}</span>. Entering a physical count will recalculate discrepancy automatically.`;
+  },
+
+  handleAdjustmentSubmit: function(e) {
+    e.preventDefault();
+    const data = {
+      type: 'ADJUSTMENT',
+      itemId: document.getElementById('adjItemId').value,
+      sourceLocation: document.getElementById('adjLocation').value,
+      countedQuantity: Number(document.getElementById('adjCountedQty').value),
+      reference: 'AUDIT-' + new Date().toISOString().slice(0, 10),
+      performedBy: 'Internal Auditor',
+      notes: document.getElementById('adjReason').value + ' | ' + document.getElementById('adjNotes').value.trim()
+    };
+
+    this.showLoading('Saving Audit Adjustment...', 'Calibrating stock records');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          app.closeModal('adjustmentModal');
+          app.showToast('Physical audit count reconciled successfully.');
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Adjustment error: ' + err.message, 'error');
+        })
+        .processStockTransaction(data);
+    } else {
+      this.hideLoading();
+      this.closeModal('adjustmentModal');
+      this.showToast('Adjustment saved (local mode)');
+    }
+  },
+
+  // BARCODE LABEL MODAL & JSBARCODE
+  openBarcodeModal: function(itemId) {
+    const item = this.state.items.find(i => i.id === itemId);
+    if (!item) return;
+
+    document.getElementById('barcodeLabelName').innerText = item.name;
+    document.getElementById('barcodeLabelCategory').innerText = item.category;
+    document.getElementById('barcodeLabelSku').innerText = item.sku;
+    document.getElementById('barcodeLabelCost').innerText = this.formatCurrency(item.unitCost);
+
+    try {
+      JsBarcode('#barcodeSvg', item.sku, {
+        format: 'CODE128',
+        lineColor: '#0f172a',
+        width: 2,
+        height: 55,
+        displayValue: true,
+        fontSize: 12,
+        font: 'Plus Jakarta Sans',
+        margin: 5
+      });
+    } catch (e) {
+      console.error('Barcode generation error', e);
+    }
+
+    this.openModal('barcodeModal');
+  },
+
+  // LIVE CAMERA BARCODE SCANNER
+  openScannerModal: function() {
+    this.openModal('scannerModal');
+    const viewport = document.getElementById('scannerViewport');
+
+    if (typeof Html5Qrcode !== 'undefined') {
+      try {
+        if (!this.state.html5QrScanner) {
+          this.state.html5QrScanner = new Html5Qrcode('scannerViewport');
+        }
+
+        const config = { fps: 10, qrbox: { width: 250, height: 160 } };
+        this.state.html5QrScanner.start(
+          { facingMode: 'environment' },
+          config,
+          (decodedText) => {
+            app.handleScanSuccess(decodedText);
+          },
+          (error) => {
+            // Scanning in progress
+          }
+        ).catch(err => {
+          console.warn('Camera scan not started or permission denied', err);
+          viewport.innerHTML = `<div class="p-4 text-center text-slate-300">Camera not accessible or permission denied. Please enter SKU manually below.</div>`;
+        });
+      } catch (err) {
+        console.error('Scanner init error', err);
+      }
+    }
+  },
+
+  closeScannerModal: function() {
+    if (this.state.html5QrScanner && this.state.html5QrScanner.isScanning) {
+      this.state.html5QrScanner.stop().then(() => {
+        app.closeModal('scannerModal');
+      }).catch(() => {
+        app.closeModal('scannerModal');
+      });
+    } else {
+      this.closeModal('scannerModal');
+    }
+  },
+
+  handleScanSuccess: function(decodedText) {
+    this.closeScannerModal();
+    this.processScannedCode(decodedText);
+  },
+
+  handleManualScanSubmit: function() {
+    const input = document.getElementById('manualBarcodeInput');
+    const val = (input ? input.value : '').trim();
+    if (!val) return;
+    this.closeScannerModal();
+    this.processScannedCode(val);
+  },
+
+  processScannedCode: function(code) {
+    const clean = code.trim().toUpperCase();
+    const item = this.state.items.find(i => 
+      (i.sku && i.sku.toUpperCase() === clean) || 
+      (i.id && i.id.toUpperCase() === clean)
+    );
+
+    if (item) {
+      this.showToast(`Found Item: ${item.name} (${item.sku})`);
+      this.switchTab('inventory');
+      const search = document.getElementById('catalogSearchInput');
+      if (search) {
+        search.value = item.sku;
+        this.filterCatalog();
+      }
+    } else {
+      if (confirm(`Scanned SKU "${code}" was not found in catalog. Would you like to create a new item with this SKU?`)) {
+        this.openItemModal();
+        document.getElementById('itemSku').value = clean;
+      }
+    }
+  },
+
+  // SUPPLIERS MODAL
+  openSupplierModal: function(sup = null) {
+    const form = document.getElementById('supplierForm');
+    form.reset();
+
+    if (sup) {
+      document.getElementById('supplierId').value = sup.id;
+      document.getElementById('supplierName').value = sup.name;
+      document.getElementById('supplierContact').value = sup.contactPerson;
+      document.getElementById('supplierPhone').value = sup.phone;
+      document.getElementById('supplierEmail').value = sup.email;
+      document.getElementById('supplierCategories').value = sup.categorySupplied;
+      document.getElementById('supplierAddress').value = sup.address;
+    } else {
+      document.getElementById('supplierId').value = '';
+    }
+
+    this.openModal('supplierModal');
+  },
+
+  editSupplier: function(supId) {
+    const s = this.state.suppliers.find(x => x.id === supId);
+    if (s) this.openSupplierModal(s);
+  },
+
+  handleSupplierFormSubmit: function(e) {
+    e.preventDefault();
+    const data = {
+      id: document.getElementById('supplierId').value,
+      name: document.getElementById('supplierName').value.trim(),
+      contactPerson: document.getElementById('supplierContact').value.trim(),
+      phone: document.getElementById('supplierPhone').value.trim(),
+      email: document.getElementById('supplierEmail').value.trim(),
+      categorySupplied: document.getElementById('supplierCategories').value.trim(),
+      address: document.getElementById('supplierAddress').value.trim(),
+      status: 'Active'
+    };
+
+    this.showLoading('Saving Supplier...', 'Updating vendor directory in Sheets');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function() {
+          app.hideLoading();
+          app.closeModal('supplierModal');
+          app.showToast('Supplier saved: ' + data.name);
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Supplier save error: ' + err.message, 'error');
+        })
+        .saveSupplier(data);
+    } else {
+      this.hideLoading();
+      this.closeModal('supplierModal');
+      this.showToast('Supplier saved (local mode)');
+    }
+  },
+
+  confirmDeleteSupplier: function(supId) {
+    if (!confirm('Are you sure you want to remove this supplier?')) return;
+    this.showLoading('Deleting Supplier...', 'Updating vendor sheet');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function() {
+          app.hideLoading();
+          app.showToast('Supplier removed');
+          app.loadInitialData(true);
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Delete error: ' + err.message, 'error');
+        })
+        .deleteSupplier(supId);
+    } else {
+      this.hideLoading();
+      this.showToast('Supplier removed (local mode)');
+    }
+  },
+
+  // CSV EXPORTERS
+  exportCatalogCSV: function() {
+    if (!this.state.items || this.state.items.length === 0) {
+      this.showToast('No items to export.', 'error');
+      return;
+    }
+
+    const headers = ['Item ID', 'SKU', 'Item Name', 'Category', 'Unit', 'Central Stock', 'Deneb Stock', 'Pollux Stock', 'Total Stock', 'Min Stock', 'Unit Cost', 'Total Valuation', 'Supplier'];
+    const rows = this.state.items.map(i => [
+      `"${i.id}"`,
+      `"${i.sku}"`,
+      `"${(i.name || '').replace(/"/g, '""')}"`,
+      `"${i.category}"`,
+      `"${i.unit}"`,
+      i.centralStock,
+      i.denebStock,
+      i.polluxStock,
+      i.totalStock,
+      i.minStock,
+      i.unitCost,
+      i.totalValue,
+      `"${(i.supplier || '').replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Deneb_Pollux_Hotels_Inventory_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    this.showToast('Inventory catalog exported to CSV!');
+  },
+
+  exportTransactionsCSV: function() {
+    if (!this.state.recentTransactions || this.state.recentTransactions.length === 0) {
+      this.showToast('No transaction records to export.', 'error');
+      return;
+    }
+
+    const headers = ['Transaction ID', 'Date Time', 'Type', 'SKU', 'Item Name', 'Quantity', 'Unit', 'Source', 'Destination', 'Total Cost', 'Reference', 'Staff', 'Notes'];
+    const rows = this.state.recentTransactions.map(t => [
+      `"${t.id}"`,
+      `"${t.timestamp}"`,
+      `"${t.type}"`,
+      `"${t.sku}"`,
+      `"${(t.itemName || '').replace(/"/g, '""')}"`,
+      t.quantity,
+      `"${t.unit || ''}"`,
+      `"${t.sourceLocation || ''}"`,
+      `"${t.destLocation || ''}"`,
+      t.totalCost,
+      `"${(t.reference || '').replace(/"/g, '""')}"`,
+      `"${(t.performedBy || '').replace(/"/g, '""')}"`,
+      `"${(t.notes || '').replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Deneb_Pollux_Hotels_Transactions_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    this.showToast('Transactions audit log exported to CSV!');
+  },
+
+  // Fallback Mock data for previewing outside Google Apps Script
+  getMockData: function() {
+    return {
+      dbInfo: { id: 'mock-sheet-id-deneb-pollux', name: 'Deneb & Pollux Hotels IMS - Mock Data', url: '#' },
+      settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'Deneb & Pollux Hotels' },
+      metrics: {
+        totalSkus: 15,
+        totalValuation: 605330,
+        totalUnits: 3233,
+        lowStockCount: 2,
+        outOfStockCount: 0,
+        locations: {
+          central: { units: 1980, valuation: 380000 },
+          deneb: { units: 680, valuation: 125000 },
+          pollux: { units: 573, valuation: 100330 }
+        },
+        categoryBreakdown: {
+          'Housekeeping & Linens': { count: 2, value: 214750 },
+          'Guest Amenities & Toiletries': { count: 3, value: 46200 },
+          'Food & Beverage': { count: 3, value: 198000 },
+          'Bar & Beverages': { count: 1, value: 144000 },
+          'Front Office & Stationery': { count: 2, value: 53550 },
+          'Maintenance & Engineering': { count: 2, value: 31980 },
+          'Cleaning & Chemicals': { count: 2, value: 91000 }
+        },
+        lowStockItems: [
+          { id: 'ITM-1014', sku: 'DP-CL-002', name: 'High Efficiency Laundry Detergent 25kg', category: 'Cleaning & Chemicals', unit: 'Drums', totalStock: 15, minStock: 20 },
+          { id: 'ITM-1008', sku: 'DP-FB-003', name: 'Organic Extra Virgin Olive Oil 5L', category: 'Food & Beverage', unit: 'Tins', totalStock: 31, minStock: 30 }
+        ],
+        todaySummary: { txnCount: 4, stockIn: 350, stockOut: 25, transfers: 45 }
+      },
+      items: [
+        { id: 'ITM-1001', sku: 'DP-HK-001', name: 'King Size Bed Sheet 400TC (White)', category: 'Housekeeping & Linens', unit: 'Pcs', minStock: 20, centralStock: 50, denebStock: 25, polluxStock: 20, totalStock: 95, unitCost: 1200, totalValue: 114000, supplier: 'Apex Hospitality Linens', storageLocation: 'Aisle 1 - Shelf A' },
+        { id: 'ITM-1002', sku: 'DP-HK-002', name: 'Bath Towel 700GSM Luxury Cotton', category: 'Housekeeping & Linens', unit: 'Pcs', minStock: 30, centralStock: 80, denebStock: 40, polluxStock: 35, totalStock: 155, unitCost: 650, totalValue: 100750, supplier: 'Apex Hospitality Linens', storageLocation: 'Aisle 1 - Shelf B' },
+        { id: 'ITM-1003', sku: 'DP-AM-001', name: 'Organic Shampoo 30ml Eco-Bottle', category: 'Guest Amenities & Toiletries', unit: 'Bottles', minStock: 100, centralStock: 400, denebStock: 150, polluxStock: 120, totalStock: 670, unitCost: 25, totalValue: 16750, supplier: 'Luxe Spa & Botanicals', storageLocation: 'Aisle 2 - Shelf A' },
+        { id: 'ITM-1006', sku: 'DP-FB-001', name: 'Arabica Dark Roast Coffee Beans 1kg', category: 'Food & Beverage', unit: 'Bags', minStock: 15, centralStock: 40, denebStock: 12, polluxStock: 10, totalStock: 62, unitCost: 1100, totalValue: 68200, supplier: 'Estate Harvest Roasters', storageLocation: 'Pantry 1 - Cool Rack' },
+        { id: 'ITM-1015', sku: 'DP-BV-001', name: 'Cabernet Sauvignon Reserve 750ml', category: 'Bar & Beverages', unit: 'Bottles', minStock: 12, centralStock: 48, denebStock: 18, polluxStock: 14, totalStock: 80, unitCost: 1800, totalValue: 144000, supplier: 'Vintage Wine Merchants', storageLocation: 'Cellar Bin 12' }
+      ],
+      suppliers: [
+        { id: 'SUP-101', name: 'Apex Hospitality Linens', contactPerson: 'Rahul Sharma', email: 'orders@apexlinens.com', phone: '+91 98765 43210', categorySupplied: 'Housekeeping & Linens', status: 'Active' },
+        { id: 'SUP-102', name: 'Luxe Spa & Botanicals', contactPerson: 'Priya Menon', email: 'supply@luxebotanicals.com', phone: '+91 98234 56789', categorySupplied: 'Guest Amenities', status: 'Active' },
+        { id: 'SUP-103', name: 'Estate Harvest Roasters', contactPerson: 'Vikram Sen', email: 'b2b@estateharvest.com', phone: '+91 97112 34567', categorySupplied: 'Food & Beverage', status: 'Active' }
+      ],
+      departments: [
+        { id: 'DEP-01', name: 'Housekeeping', propertyScope: 'Both Properties', headOfDepartment: 'Ms. Sunita Patil' },
+        { id: 'DEP-02', name: 'F&B Production (Kitchen)', propertyScope: 'Both Properties', headOfDepartment: 'Chef Antoine Girard' },
+        { id: 'DEP-03', name: 'Front Office & Concierge', propertyScope: 'Both Properties', headOfDepartment: 'Ms. Neha Gupta' },
+        { id: 'DEP-04', name: 'Engineering & Maintenance', propertyScope: 'Both Properties', headOfDepartment: 'Mr. K. R. Nambiar' }
+      ],
+      locations: [
+        { code: 'CENTRAL', name: 'Central Warehouse', type: 'Main Distribution Depot' },
+        { code: 'DENEB', name: 'Deneb Hotel Store', type: 'Property Main Store' },
+        { code: 'POLLUX', name: 'Pollux Hotel Store', type: 'Property Main Store' }
+      ],
+      recentTransactions: [
+        { id: 'TXN-20260902-101', timestamp: new Date().toISOString(), type: 'STOCK_IN', sku: 'DP-AM-001', itemName: 'Organic Shampoo 30ml Eco-Bottle', quantity: 300, unit: 'Bottles', sourceLocation: 'Luxe Spa & Botanicals', destLocation: 'Central Warehouse', totalCost: 7500, reference: 'PO-2026-908', performedBy: 'Inventory Mgr' },
+        { id: 'TXN-20260902-102', timestamp: new Date().toISOString(), type: 'TRANSFER', sku: 'DP-HK-001', itemName: 'King Size Bed Sheet 400TC (White)', quantity: 25, unit: 'Pcs', sourceLocation: 'Central Warehouse', destLocation: 'Deneb Hotel Store', totalCost: 30000, reference: 'TRF-0881', performedBy: 'Logistics Coord' }
+      ]
+    };
+  }
+};
+
+// Auto-run on DOM Ready
+document.addEventListener('DOMContentLoaded', function() {
+  app.init();
+});
+</script>

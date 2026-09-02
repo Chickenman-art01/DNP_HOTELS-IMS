@@ -1,0 +1,13 @@
+**/**
+!appsscript.json
+!*.ts
+!*.js
+!*.gs
+!*.html
+node_modules/**
+package.json
+package-lock.json
+tsconfig.json
+.gitignore
+.git/**
+README.md
