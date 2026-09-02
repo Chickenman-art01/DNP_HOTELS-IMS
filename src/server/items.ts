@@ -1,41 +1,49 @@
 /**
- * DNP HOTELS - Items Catalog & Dashboard Metrics
+ * DNP HOTELS - Product Master, Catalog & Dashboard Metrics
  */
 
 function getItemsInternal(ss) {
-  const sheet = ss.getSheetByName(SHEET_NAMES.ITEMS);
+  const sheet = ss.getSheetByName('Product_Master');
   if (!sheet) return [];
+
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
   const items = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[0] && !row[2]) continue;
+    if (!row[0] && !row[1]) continue;
 
-    const central = Number(row[6]) || 0;
-    const deneb = Number(row[7]) || 0;
-    const pollux = Number(row[8]) || 0;
-    const total = central + deneb + pollux;
-    const unitCost = Number(row[10]) || 0;
-    const totalValue = total * unitCost;
+    const rate = Number(row[5]) || 0;
+    const tax = Number(row[6]) || 0;
+    const minStock = Number(row[7]) || 0;
+    const stockS001 = Number(row[8]) || 0;
+    const stockS002 = Number(row[9]) || 0;
+    const centralStock = Number(row[10]) || 0;
+    const totalStock = stockS001 + stockS002 + centralStock;
+    const totalValue = totalStock * rate;
 
     items.push({
-      rowIndex: i + 1,
-      id: String(row[0] || ''),
-      sku: String(row[1] || ''),
-      name: String(row[2] || ''),
-      category: String(row[3] || 'General'),
+      id: String(row[0]),
+      code: String(row[0]),
+      sku: String(row[0]),
+      name: String(row[1]),
+      description: String(row[1]),
+      category: String(row[2]),
+      categoryCode: String(row[3] || ''),
       unit: String(row[4] || 'Pcs'),
-      minStock: Number(row[5]) || 0,
-      centralStock: central,
-      denebStock: deneb,
-      polluxStock: pollux,
-      totalStock: total,
-      unitCost: unitCost,
+      uom: String(row[4] || 'Pcs'),
+      rate: rate,
+      unitCost: rate,
+      taxPercent: tax,
+      minStock: minStock,
+      stockS001: stockS001,
+      stockS002: stockS002,
+      centralStock: centralStock,
+      totalStock: totalStock,
       totalValue: totalValue,
-      supplier: String(row[12] || ''),
-      storageLocation: String(row[13] || ''),
+      supplierCode: String(row[13] || ''),
+      supplier: String(row[13] || ''),
       status: String(row[14] || 'Active'),
       lastUpdated: row[15] ? new Date(row[15]).toISOString() : ''
     });
@@ -44,214 +52,168 @@ function getItemsInternal(ss) {
 }
 
 function getItems() {
-  const ss = getSpreadsheet();
+  const ss = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
   return getItemsInternal(ss);
 }
 
 function saveItem(itemData) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(30000);
-  } catch (e) {
-    throw new Error('Server is busy. Please retry in a few moments.');
-  }
+  const ss = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
+  const sheet = ss.getSheetByName('Product_Master');
+  if (!sheet) throw new Error('Product_Master sheet missing');
 
-  try {
-    const ss = getSpreadsheet();
-    const sheet = ss.getSheetByName(SHEET_NAMES.ITEMS);
-    if (!sheet) throw new Error('Items sheet not found.');
+  const data = sheet.getDataRange().getValues();
+  let itemCode = itemData.code || itemData.sku || itemData.id ? String(itemData.code || itemData.sku || itemData.id).trim().toUpperCase() : '';
+  let targetRow = -1;
 
-    const data = sheet.getDataRange().getValues();
-    const nowIso = new Date().toISOString();
-
-    let targetRow = -1;
-    let itemId = itemData.id ? String(itemData.id).trim() : '';
-
-    if (itemId) {
-      for (let i = 1; i < data.length; i++) {
-        if (String(data[i][0]) === itemId) {
-          targetRow = i + 1;
-          break;
-        }
-      }
-    }
-
-    const minStock = Number(itemData.minStock) || 0;
-    const centralStock = Number(itemData.centralStock) || 0;
-    const denebStock = Number(itemData.denebStock) || 0;
-    const polluxStock = Number(itemData.polluxStock) || 0;
-    const totalStock = centralStock + denebStock + polluxStock;
-    const unitCost = Number(itemData.unitCost) || 0;
-    const totalValue = totalStock * unitCost;
-
-    let sku = itemData.sku ? String(itemData.sku).trim() : '';
-    if (!sku) {
-      const catPrefix = (itemData.category || 'GEN').substring(0, 2).toUpperCase();
-      sku = 'DP-' + catPrefix + '-' + Math.floor(1000 + Math.random() * 9000);
-    }
-
-    if (targetRow > 1) {
-      sheet.getRange(targetRow, 1, 1, 16).setValues([[
-        itemId,
-        sku,
-        itemData.name,
-        itemData.category,
-        itemData.unit || 'Pcs',
-        minStock,
-        centralStock,
-        denebStock,
-        polluxStock,
-        totalStock,
-        unitCost,
-        totalValue,
-        itemData.supplier || '',
-        itemData.storageLocation || '',
-        itemData.status || 'Active',
-        nowIso
-      ]]);
-    } else {
-      if (!itemId) {
-        itemId = 'ITM-' + (1000 + data.length);
-      }
-
-      sheet.appendRow([
-        itemId,
-        sku,
-        itemData.name,
-        itemData.category,
-        itemData.unit || 'Pcs',
-        minStock,
-        centralStock,
-        denebStock,
-        polluxStock,
-        totalStock,
-        unitCost,
-        totalValue,
-        itemData.supplier || '',
-        itemData.storageLocation || '',
-        itemData.status || 'Active',
-        nowIso
-      ]);
-    }
-
-    return {
-      success: true,
-      item: {
-        id: itemId,
-        sku: sku,
-        name: itemData.name,
-        category: itemData.category,
-        unit: itemData.unit,
-        minStock: minStock,
-        centralStock: centralStock,
-        denebStock: denebStock,
-        polluxStock: polluxStock,
-        totalStock: totalStock,
-        unitCost: unitCost,
-        totalValue: totalValue,
-        supplier: itemData.supplier,
-        storageLocation: itemData.storageLocation,
-        status: itemData.status || 'Active',
-        lastUpdated: nowIso
-      }
-    };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function deleteItem(itemId) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(30000);
-  } catch (e) {
-    throw new Error('Server is busy. Please retry.');
-  }
-
-  try {
-    const ss = getSpreadsheet();
-    const sheet = ss.getSheetByName(SHEET_NAMES.ITEMS);
-    if (!sheet) throw new Error('Items sheet not found.');
-
-    const data = sheet.getDataRange().getValues();
+  if (itemCode) {
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === String(itemId)) {
-        sheet.deleteRow(i + 1);
-        return { success: true, message: 'Item deleted successfully.' };
+      if (String(data[i][0]).toUpperCase() === itemCode) {
+        targetRow = i + 1;
+        break;
       }
     }
-    return { success: false, error: 'Item ID not found.' };
-  } finally {
-    lock.releaseLock();
   }
+
+  const rate = Number(itemData.rate || itemData.unitCost) || 0;
+  const tax = Number(itemData.taxPercent) || 0;
+  const minStock = Number(itemData.minStock) || 0;
+  const stockS001 = Number(itemData.stockS001 || itemData.denebStock) || 0;
+  const stockS002 = Number(itemData.stockS002 || itemData.polluxStock) || 0;
+  const centralStock = Number(itemData.centralStock) || 0;
+  const totalStock = stockS001 + stockS002 + centralStock;
+  const totalVal = totalStock * rate;
+  const nowIso = new Date().toISOString();
+
+  if (targetRow > 1) {
+    sheet.getRange(targetRow, 1, 1, 16).setValues([[
+      itemCode,
+      itemData.name || itemData.description,
+      itemData.category,
+      itemData.categoryCode || ('CAT_' + String(itemData.category).slice(0, 3).toUpperCase()),
+      itemData.unit || itemData.uom || 'Pcs',
+      rate,
+      tax,
+      minStock,
+      stockS001,
+      stockS002,
+      centralStock,
+      totalStock,
+      totalVal,
+      itemData.supplierCode || itemData.supplier || '',
+      itemData.status || 'Active',
+      nowIso
+    ]]);
+  } else {
+    if (!itemCode) {
+      itemCode = 'ITM_' + String(data.length).padStart(3, '0');
+    }
+    sheet.appendRow([
+      itemCode,
+      itemData.name || itemData.description,
+      itemData.category,
+      itemData.categoryCode || ('CAT_' + String(itemData.category).slice(0, 3).toUpperCase()),
+      itemData.unit || itemData.uom || 'Pcs',
+      rate,
+      tax,
+      minStock,
+      stockS001,
+      stockS002,
+      centralStock,
+      totalStock,
+      totalVal,
+      itemData.supplierCode || itemData.supplier || '',
+      itemData.status || 'Active',
+      nowIso
+    ]);
+  }
+
+  return { success: true, itemCode: itemCode };
 }
 
-function calculateDashboardMetrics(items, transactions) {
-  let totalSkus = items.length;
+function deleteItem(itemCode) {
+  const ss = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
+  const sheet = ss.getSheetByName('Product_Master');
+  if (!sheet) throw new Error('Product_Master sheet missing');
+
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toUpperCase() === String(itemCode).toUpperCase()) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'Item not found' };
+}
+
+function calculateDashboardMetrics(items, supplierTxns, issuanceTxns) {
   let totalValuation = 0;
   let totalUnits = 0;
+  let totalSkus = items.length;
   let lowStockCount = 0;
   let outOfStockCount = 0;
 
-  let centralStockUnits = 0;
+  let s001Units = 0;
+  let s001Valuation = 0;
+  let s002Units = 0;
+  let s002Valuation = 0;
+  let centralUnits = 0;
   let centralValuation = 0;
-  let denebStockUnits = 0;
-  let denebValuation = 0;
-  let polluxStockUnits = 0;
-  let polluxValuation = 0;
 
   const categoryMap = {};
   const lowStockItems = [];
 
   items.forEach(item => {
-    const totalStock = Number(item.totalStock) || 0;
-    const minStock = Number(item.minStock) || 0;
-    const unitCost = Number(item.unitCost) || 0;
-    const centralStock = Number(item.centralStock) || 0;
-    const denebStock = Number(item.denebStock) || 0;
-    const polluxStock = Number(item.polluxStock) || 0;
+    const total = Number(item.totalStock) || 0;
+    const min = Number(item.minStock) || 0;
+    const rate = Number(item.rate) || 0;
+    const itemVal = total * rate;
 
-    const itemValuation = totalStock * unitCost;
-    totalValuation += itemValuation;
-    totalUnits += totalStock;
+    totalUnits += total;
+    totalValuation += itemVal;
 
-    centralStockUnits += centralStock;
-    centralValuation += centralStock * unitCost;
+    s001Units += Number(item.stockS001) || 0;
+    s001Valuation += (Number(item.stockS001) || 0) * rate;
 
-    denebStockUnits += denebStock;
-    denebValuation += denebStock * unitCost;
+    s002Units += Number(item.stockS002) || 0;
+    s002Valuation += (Number(item.stockS002) || 0) * rate;
 
-    polluxStockUnits += polluxStock;
-    polluxValuation += polluxStock * unitCost;
+    centralUnits += Number(item.centralStock) || 0;
+    centralValuation += (Number(item.centralStock) || 0) * rate;
 
-    if (totalStock === 0) {
+    if (total === 0) {
       outOfStockCount++;
       lowStockItems.push(item);
-    } else if (totalStock <= minStock) {
+    } else if (total <= min) {
       lowStockCount++;
       lowStockItems.push(item);
     }
 
-    const cat = item.category || 'Uncategorized';
+    const cat = item.category || 'General';
     if (!categoryMap[cat]) {
-      categoryMap[cat] = { count: 0, value: 0 };
+      categoryMap[cat] = { count: 0, units: 0, value: 0 };
     }
-    categoryMap[cat].count++;
-    categoryMap[cat].value += itemValuation;
+    categoryMap[cat].count += 1;
+    categoryMap[cat].units += total;
+    categoryMap[cat].value += itemVal;
   });
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  let todayTxnCount = 0;
-  let todayStockIn = 0;
-  let todayStockOut = 0;
-  let todayTransfers = 0;
+  let todayPurchases = 0;
+  let todayPurchasesVal = 0;
+  let todayIssues = 0;
+  let todayIssuesVal = 0;
 
-  transactions.forEach(t => {
+  supplierTxns.forEach(t => {
     if (t.timestamp && t.timestamp.startsWith(todayStr)) {
-      todayTxnCount++;
-      if (t.type === 'STOCK_IN') todayStockIn += Number(t.quantity) || 0;
-      if (t.type === 'STOCK_OUT') todayStockOut += Number(t.quantity) || 0;
-      if (t.type === 'TRANSFER') todayTransfers += Number(t.quantity) || 0;
+      todayPurchases += Number(t.quantity) || 0;
+      todayPurchasesVal += Number(t.totalAmount) || 0;
+    }
+  });
+
+  issuanceTxns.forEach(t => {
+    if (t.timestamp && t.timestamp.startsWith(todayStr)) {
+      todayIssues += Number(t.quantity) || 0;
+      todayIssuesVal += Number(t.totalValue) || 0;
     }
   });
 
@@ -261,57 +223,51 @@ function calculateDashboardMetrics(items, transactions) {
     totalUnits: totalUnits,
     lowStockCount: lowStockCount,
     outOfStockCount: outOfStockCount,
-    locations: {
-      central: { units: centralStockUnits, valuation: Math.round(centralValuation) },
-      deneb: { units: denebStockUnits, valuation: Math.round(denebValuation) },
-      pollux: { units: polluxStockUnits, valuation: Math.round(polluxValuation) }
+    stores: {
+      s001: { name: '21 GUN SOLUTE GGN SEC 29', code: 'S_001', units: s001Units, valuation: Math.round(s001Valuation) },
+      s002: { name: 'PAHLE CHAI GGN Sec 27', code: 'S_002', units: s002Units, valuation: Math.round(s002Valuation) },
+      central: { name: 'Central Depot Warehouse', code: 'S_000', units: centralUnits, valuation: Math.round(centralValuation) }
     },
     categoryBreakdown: categoryMap,
     lowStockItems: lowStockItems.slice(0, 10),
     todaySummary: {
-      txnCount: todayTxnCount,
-      stockIn: todayStockIn,
-      stockOut: todayStockOut,
-      transfers: todayTransfers
+      txnCount: supplierTxns.length + issuanceTxns.length,
+      stockIn: todayPurchases,
+      stockInValue: todayPurchasesVal,
+      stockOut: todayIssues,
+      stockOutValue: todayIssuesVal
     }
   };
 }
 
 function getInitialData() {
-  const ss = getSpreadsheet();
-  const folder = getDriveFolder();
-  const props = PropertiesService.getScriptProperties();
-  const folderId = props.getProperty('DRIVE_FOLDER_ID') || DEFAULT_DRIVE_FOLDER_ID;
+  // Ensure all 6 workbooks are initialized
+  initAllWorkbooks();
 
-  const dbInfo = {
-    id: ss.getId(),
-    name: ss.getName(),
-    url: ss.getUrl(),
-    folder: {
-      id: folderId,
-      name: folder ? folder.getName() : 'DNP Database Drive Folder',
-      url: folder ? folder.getUrl() : 'https://drive.google.com/drive/folders/' + folderId
-    },
-    folderSheets: getFolderSheets()
-  };
-
-  const items = getItemsInternal(ss);
-  const suppliers = getSuppliersInternal(ss);
-  const departments = getDepartmentsInternal(ss);
-  const locations = getLocationsInternal(ss);
-  const settings = getSettingsInternal(ss);
-  const transactions = getTransactionsInternal(ss, 25);
-  const metrics = calculateDashboardMetrics(items, transactions);
+  const workbooksInfo = getWorkbooksInfo();
+  const prodWb = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
+  const items = getItemsInternal(prodWb);
+  const suppliers = getSuppliers();
+  const stores = getStores();
+  const sellingPoints = getSellingPoints();
+  const users = getUsers();
+  const settings = getSettings();
+  const supplierTxns = getSupplierTransactions(50);
+  const issuanceTxns = getIssuanceTransactions(50);
+  const metrics = calculateDashboardMetrics(items, supplierTxns, issuanceTxns);
 
   return {
     success: true,
-    dbInfo: dbInfo,
+    workbooksInfo: workbooksInfo,
     metrics: metrics,
     items: items,
     suppliers: suppliers,
-    departments: departments,
-    locations: locations,
+    stores: stores,
+    sellingPoints: sellingPoints,
+    users: users,
     settings: settings,
-    recentTransactions: transactions
+    supplierTransactions: supplierTxns,
+    issuanceTransactions: issuanceTxns,
+    recentTransactions: issuanceTxns
   };
 }

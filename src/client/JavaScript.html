@@ -107,23 +107,29 @@ const app = {
     this.hideLoading();
     if (!data) return;
 
-    this.state.dbInfo = data.dbInfo || {};
+    this.state.workbooksInfo = data.workbooksInfo || {};
+    this.state.dbInfo = data.dbInfo || (data.workbooksInfo ? data.workbooksInfo.folder : {});
     this.state.metrics = data.metrics || {};
     this.state.items = data.items || [];
     this.state.suppliers = data.suppliers || [];
+    this.state.stores = data.stores || [];
+    this.state.sellingPoints = data.sellingPoints || [];
     this.state.departments = data.departments || [];
     this.state.locations = data.locations || [];
-    this.state.settings = data.settings || { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'DNP HOTELS' };
-    this.state.recentTransactions = data.recentTransactions || [];
+    this.state.users = data.users || [];
+    this.state.settings = data.settings || { CURRENCY_SYMBOL: '₹', HOTEL_NAME: '21 Gun Salute & Pahle Chai (DNP Hotels)' };
+    this.state.supplierTransactions = data.supplierTransactions || [];
+    this.state.issuanceTransactions = data.issuanceTransactions || [];
+    this.state.recentTransactions = data.issuanceTransactions || data.recentTransactions || [];
 
     // Update Nav Count
     const navBadge = document.getElementById('navTotalItemsBadge');
     if (navBadge) navBadge.innerText = this.state.items.length;
 
-    // Update Google Sheet links
+    // Update Google Sheet links and Multi-Workbook grid
     this.updateGoogleSheetLinks();
 
-    // Populate dropdowns across modals
+    // Populate dropdowns across modals with real 28 suppliers, stores, and selling points
     this.populateAllSelectDropdowns();
 
     // Render components
@@ -136,21 +142,12 @@ const app = {
   },
 
   updateGoogleSheetLinks: function() {
-    const sheetUrl = this.state.dbInfo.url || '#';
-    const sheetId = this.state.dbInfo.id || '--';
-    const sheetName = this.state.dbInfo.name || 'DNP HOTELS Database';
-    const folder = this.state.dbInfo.folder || {
+    const wbInfo = this.state.workbooksInfo || {};
+    const folder = wbInfo.folder || {
       id: '1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx',
       name: 'DNP Database Drive Folder',
       url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx'
     };
-
-    const headerSheetLink = document.getElementById('openSheetBtn');
-    if (headerSheetLink) {
-      headerSheetLink.href = sheetUrl;
-      if (!this.state.dbInfo.url) headerSheetLink.classList.add('hidden');
-      else headerSheetLink.classList.remove('hidden');
-    }
 
     const headerDriveLink = document.getElementById('openDriveFolderBtn');
     if (headerDriveLink && folder.url) {
@@ -163,60 +160,64 @@ const app = {
     }
 
     const folderNameEl = document.getElementById('driveFolderName');
-    if (folderNameEl) folderNameEl.innerText = folder.name;
+    if (folderNameEl) folderNameEl.innerText = folder.name || 'DNP Database Drive Folder';
 
     const folderIdEl = document.getElementById('driveFolderId');
-    if (folderIdEl) folderIdEl.innerText = folder.id;
+    if (folderIdEl) folderIdEl.innerText = folder.id || '1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx';
 
-    const settingsLink = document.getElementById('settingsDirectSheetLink');
-    if (settingsLink) settingsLink.href = sheetUrl;
-
-    const nameEl = document.getElementById('settingsDbName');
-    if (nameEl) nameEl.innerText = sheetName;
-
-    const idEl = document.getElementById('settingsDbId');
-    if (idEl) idEl.innerText = sheetId;
-
-    this.renderDriveFolderSheets();
+    this.renderWorkbooksGrid();
   },
 
-  renderDriveFolderSheets: function() {
-    const container = document.getElementById('driveFolderSheetsList');
+  renderWorkbooksGrid: function() {
+    const container = document.getElementById('workbooksGrid');
     if (!container) return;
 
-    const sheets = this.state.dbInfo.folderSheets || [];
-    const activeId = this.state.dbInfo.id;
+    const workbooks = (this.state.workbooksInfo && this.state.workbooksInfo.workbooks) ? this.state.workbooksInfo.workbooks : [
+      { key: 'Location_Master', name: 'Location_Master', sheets: ['Store', 'Selling_Point'], url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx' },
+      { key: 'Product_Master', name: 'Product_Master', sheets: ['Product_Master'], url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx' },
+      { key: 'Supplier_Master', name: 'Supplier_Master', sheets: ['Supplier_Master (28 Vendors)'], url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx' },
+      { key: 'Supplier_Transactions', name: 'Supplier_Transactions', sheets: ['Supplier_Transactions'], url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx' },
+      { key: 'Issuance_Transactions', name: 'Issuance_Transactions', sheets: ['Issuance_Transactions'], url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx' },
+      { key: 'Users_and_Settings', name: 'Users_and_Settings', sheets: ['Users', 'Settings'], url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx' }
+    ];
 
-    if (sheets.length === 0) {
-      container.innerHTML = `
-        <div class="p-3 bg-slate-50 rounded-lg border border-dashed border-slate-300 text-[11px] text-slate-500 text-center">
-          <i class="fa-solid fa-file-circle-plus text-slate-400 mr-1.5"></i>
-          No spreadsheets detected inside this Drive folder yet. New database sheets and exports will be stored here.
-        </div>
-      `;
-      return;
-    }
+    const iconMap = {
+      'Location_Master': 'storefront',
+      'Product_Master': 'inventory_2',
+      'Supplier_Master': 'local_shipping',
+      'Supplier_Transactions': 'receipt_long',
+      'Issuance_Transactions': 'outbox',
+      'Users_and_Settings': 'settings_suggest'
+    };
 
-    container.innerHTML = sheets.map(s => {
-      const isActive = s.id === activeId;
-      const timeStr = s.lastUpdated ? new Date(s.lastUpdated).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    container.innerHTML = workbooks.map(wb => {
+      const icon = iconMap[wb.key] || 'table_view';
+      const sheetPills = (wb.sheets || []).map(s => 
+        `<span class="bg-surface-container-highest text-primary font-data-tabular px-1.5 py-0.5 rounded text-[10px]">${s}</span>`
+      ).join(' ');
+
       return `
-        <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border ${isActive ? 'border-emerald-300 bg-emerald-50/40' : 'border-slate-200'}">
-          <div class="flex items-center space-x-2">
-            <i class="fa-solid fa-file-excel text-emerald-600 text-base"></i>
+        <div class="bg-surface-container-high rounded-xl p-md border border-outline-variant/10 flex flex-col justify-between hover:border-outline-variant/30 transition space-y-3">
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="material-symbols-outlined text-primary text-[24px]">${icon}</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-container/20 text-secondary border border-secondary/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-secondary mr-1"></span> Live Sync
+              </span>
+            </div>
             <div>
-              <div class="font-bold text-slate-800 text-xs">${s.name}</div>
-              <div class="text-[10px] text-slate-400 font-mono">ID: ${s.id} ${timeStr ? '• Updated ' + timeStr : ''}</div>
+              <h4 class="font-bold text-on-surface text-sm">${wb.name}</h4>
+              <p class="text-[11px] text-outline font-data-tabular truncate">ID: ${wb.id || 'Active Drive File'}</p>
+            </div>
+            <div class="flex flex-wrap gap-1 pt-1">
+              ${sheetPills}
             </div>
           </div>
-          <div class="flex items-center space-x-2">
-            <a href="${s.url}" target="_blank" class="text-[11px] text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-200 transition">
-              Open <i class="fa-solid fa-arrow-up-right-from-square text-[9px] ml-0.5"></i>
+          <div class="pt-2 border-t border-outline-variant/10 flex items-center justify-between">
+            <a href="${wb.url}" target="_blank" class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+              <span>Open in Sheets</span>
+              <span class="material-symbols-outlined text-[14px]">open_in_new</span>
             </a>
-            ${isActive 
-              ? `<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-300"><i class="fa-solid fa-check mr-1"></i>Active</span>`
-              : `<button onclick="app.activateSheetFromFolder('${s.id}')" class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] px-2.5 py-1 rounded transition">Set as Active</button>`
-            }
           </div>
         </div>
       `;
@@ -532,39 +533,39 @@ const app = {
     const container = document.getElementById('managedPropertiesList');
     if (!container) return;
 
-    const locData = locations || {
+    const locData = locations || (this.state.metrics ? this.state.metrics.stores : null) || {
       central: { units: 1980, valuation: 380000 },
-      deneb: { units: 680, valuation: 125000 },
-      pollux: { units: 573, valuation: 100330 }
+      s001: { units: 680, valuation: 125000 },
+      s002: { units: 573, valuation: 100330 }
     };
 
     const stores = [
       {
-        name: 'Central Warehouse (Depot)',
-        code: 'CENTRAL',
-        icon: 'warehouse',
+        name: '21 GUN SOLUTE GGN SEC 29',
+        code: 'S_001',
+        icon: 'storefront',
         color: 'text-primary',
-        units: locData.central ? locData.central.units : 0,
-        valuation: locData.central ? locData.central.valuation : 0,
+        units: (locData.s001 ? locData.s001.units : (locData.deneb ? locData.deneb.units : 0)),
+        valuation: (locData.s001 ? locData.s001.valuation : (locData.deneb ? locData.deneb.valuation : 0)),
         health: 'Good'
       },
       {
-        name: 'Deneb Hotel Store',
-        code: 'DENEB',
-        icon: 'hotel',
+        name: 'PAHLE CHAI GGN Sec 27',
+        code: 'S_002',
+        icon: 'local_cafe',
         color: 'text-secondary',
-        units: locData.deneb ? locData.deneb.units : 0,
-        valuation: locData.deneb ? locData.deneb.valuation : 0,
+        units: (locData.s002 ? locData.s002.units : (locData.pollux ? locData.pollux.units : 0)),
+        valuation: (locData.s002 ? locData.s002.valuation : (locData.pollux ? locData.pollux.valuation : 0)),
         health: 'Good'
       },
       {
-        name: 'Pollux Hotel Store',
-        code: 'POLLUX',
-        icon: 'hotel',
+        name: 'Central Depot Warehouse',
+        code: 'S_000',
+        icon: 'warehouse',
         color: 'text-tertiary',
-        units: locData.pollux ? locData.pollux.units : 0,
-        valuation: locData.pollux ? locData.pollux.valuation : 0,
-        health: 'Alert'
+        units: (locData.central ? locData.central.units : 0),
+        valuation: (locData.central ? locData.central.valuation : 0),
+        health: 'Good'
       }
     ];
 
@@ -1214,19 +1215,37 @@ const app = {
       if (el) el.innerHTML = itemOptions;
     });
 
-    // Populate Suppliers in Item & Stock In forms
+    // Populate Suppliers in Item & Stock In forms (all 28 real vendors)
     const supOptions = `<option value="">-- None / Direct --</option>` +
-      this.state.suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+      this.state.suppliers.map(s => `<option value="${s.name}">[${s.code || s.id}] ${s.name} (${s.category})</option>`).join('');
 
     ['itemSupplier', 'stockInSupplier'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = supOptions;
     });
 
-    // Populate Departments in Stock Out form
-    const deptOptions = this.state.departments.map(d => `<option value="${d.name}">${d.name} (${d.propertyScope})</option>`).join('');
+    // Populate Stores in Stock In, Stock Out & Transfer forms
+    const storeOptions = (this.state.stores && this.state.stores.length > 0 ? this.state.stores : [
+      { code: 'S_001', name: '21 GUN SOLUTE GGN SEC 29' },
+      { code: 'S_002', name: 'PAHLE CHAI GGN Sec 27' },
+      { code: 'S_000', name: 'Central Depot Warehouse' }
+    ]).map(st => `<option value="${st.code}">[${st.code}] ${st.name}</option>`).join('');
+
+    ['stockInDest', 'stockOutSource', 'transferSource', 'transferDest'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = storeOptions;
+    });
+
+    // Populate Selling Points & Departments in Stock Out / Requisitions form
+    const spOptions = (this.state.sellingPoints && this.state.sellingPoints.length > 0 ? this.state.sellingPoints : [
+      { code: 'SP_001', name: '21 GUN SOLUTE GGN SEC 29', type: 'Dining & Bar' },
+      { code: 'SP_002', name: 'PAHLE CHAI GGN Sec 27', type: 'Chai Counter' },
+      { code: 'SP_003', name: '21 Gun Salute - Kitchen Store', type: 'F&B Production' },
+      { code: 'SP_004', name: '21 Gun Salute - Bar & Lounge', type: 'Beverage Counter' }
+    ]).map(sp => `<option value="${sp.code}">[${sp.code}] ${sp.name} (${sp.type})</option>`).join('');
+
     const stockOutDept = document.getElementById('stockOutDept');
-    if (stockOutDept) stockOutDept.innerHTML = deptOptions;
+    if (stockOutDept) stockOutDept.innerHTML = spOptions;
   },
 
   // ITEM MODAL
@@ -1342,26 +1361,37 @@ const app = {
 
   handleStockInSubmit: function(e) {
     e.preventDefault();
+    const supVal = document.getElementById('stockInSupplier').value;
+    const supObj = this.state.suppliers.find(s => s.name === supVal || s.code === supVal);
+    const storeVal = document.getElementById('stockInDest').value;
+    const storeObj = (this.state.stores || []).find(st => st.code === storeVal || st.name === storeVal);
+
     const data = {
       type: 'STOCK_IN',
       itemId: document.getElementById('stockInItemId').value,
-      destLocation: document.getElementById('stockInDest').value,
-      sourceLocation: document.getElementById('stockInSupplier').value || 'Supplier Direct',
+      itemCode: document.getElementById('stockInItemId').value,
+      destLocation: storeVal,
+      storeCode: storeObj ? storeObj.code : storeVal,
+      storeName: storeObj ? storeObj.name : storeVal,
+      supplierCode: supObj ? supObj.code : '',
+      supplierName: supObj ? supObj.name : supVal,
+      sourceLocation: supObj ? supObj.name : supVal,
       quantity: Number(document.getElementById('stockInQty').value),
+      rate: Number(document.getElementById('stockInUnitPrice').value) || 0,
       unitPrice: Number(document.getElementById('stockInUnitPrice').value) || 0,
       reference: document.getElementById('stockInRef').value.trim(),
-      performedBy: document.getElementById('stockInStaff').value.trim() || 'Inventory Staff',
+      performedBy: document.getElementById('stockInStaff').value.trim() || 'Store Keeper',
       notes: document.getElementById('stockInNotes').value.trim()
     };
 
-    this.showLoading('Recording Stock In...', 'Updating property stock and ledger');
+    this.showLoading('Recording Supplier Purchase...', 'Updating Product_Master and Supplier_Transactions');
 
     if (this.isGasEnv()) {
       google.script.run
         .withSuccessHandler(function(res) {
           app.hideLoading();
           app.closeModal('stockInModal');
-          app.showToast('Stock received and added to ' + data.destLocation);
+          app.showToast('Stock received and recorded in Supplier_Transactions');
           app.loadInitialData(true);
         })
         .withFailureHandler(function(err) {
@@ -1399,11 +1429,11 @@ const app = {
     if (!item || !infoEl) return;
 
     let available = 0;
-    if (sourceLoc.includes('Central')) available = item.centralStock;
-    else if (sourceLoc.includes('Deneb')) available = item.denebStock;
-    else if (sourceLoc.includes('Pollux')) available = item.polluxStock;
+    if (sourceLoc.includes('S_001') || sourceLoc.includes('21 GUN')) available = item.stockS001 || item.denebStock || 0;
+    else if (sourceLoc.includes('S_002') || sourceLoc.includes('PAHLE')) available = item.stockS002 || item.polluxStock || 0;
+    else available = item.centralStock || 0;
 
-    infoEl.innerHTML = `Available in <span class="text-slate-800 font-bold">${sourceLoc}</span>: <span class="font-bold text-amber-600">${available} ${item.unit}</span> (Total in hotel chain: ${item.totalStock})`;
+    infoEl.innerHTML = `Available in <span class="text-on-surface font-bold font-data-tabular">${sourceLoc}</span>: <span class="font-bold text-secondary font-data-tabular">${available} ${item.unit}</span> (Total across all stores: ${item.totalStock})`;
   },
 
   handleStockOutSubmit: function(e) {
@@ -1411,13 +1441,14 @@ const app = {
     const itemId = document.getElementById('stockOutItemId').value;
     const sourceLoc = document.getElementById('stockOutSource').value;
     const qty = Number(document.getElementById('stockOutQty').value);
+    const destSp = document.getElementById('stockOutDept').value;
 
     const item = this.state.items.find(i => i.id === itemId);
     if (item) {
       let available = 0;
-      if (sourceLoc.includes('Central')) available = item.centralStock;
-      else if (sourceLoc.includes('Deneb')) available = item.denebStock;
-      else if (sourceLoc.includes('Pollux')) available = item.polluxStock;
+      if (sourceLoc.includes('S_001') || sourceLoc.includes('21 GUN')) available = item.stockS001 || item.denebStock || 0;
+      else if (sourceLoc.includes('S_002') || sourceLoc.includes('PAHLE')) available = item.stockS002 || item.polluxStock || 0;
+      else available = item.centralStock || 0;
 
       if (available < qty) {
         this.showToast(`Insufficient stock in ${sourceLoc}. Available: ${available}, Requested: ${qty}`, 'error');
@@ -1428,15 +1459,18 @@ const app = {
     const data = {
       type: 'STOCK_OUT',
       itemId: itemId,
+      itemCode: itemId,
       sourceLocation: sourceLoc,
-      destLocation: document.getElementById('stockOutDept').value,
+      fromStore: sourceLoc,
+      destLocation: destSp,
+      toSellingPoint: destSp,
       quantity: qty,
       reference: document.getElementById('stockOutRef').value.trim(),
-      performedBy: document.getElementById('stockOutRequester').value.trim() || 'Dept Staff',
+      performedBy: document.getElementById('stockOutRequester').value.trim() || 'Store Incharge',
       notes: document.getElementById('stockOutNotes').value.trim()
     };
 
-    this.showLoading('Disbursing Stock...', 'Updating inventory ledger');
+    this.showLoading('Disbursing Stock...', 'Recording in Issuance_Transactions');
 
     if (this.isGasEnv()) {
       google.script.run
@@ -1481,11 +1515,11 @@ const app = {
     if (!item || !infoEl) return;
 
     let available = 0;
-    if (sourceLoc.includes('Central')) available = item.centralStock;
-    else if (sourceLoc.includes('Deneb')) available = item.denebStock;
-    else if (sourceLoc.includes('Pollux')) available = item.polluxStock;
+    if (sourceLoc.includes('S_001') || sourceLoc.includes('21 GUN')) available = item.stockS001 || item.denebStock || 0;
+    else if (sourceLoc.includes('S_002') || sourceLoc.includes('PAHLE')) available = item.stockS002 || item.polluxStock || 0;
+    else available = item.centralStock || 0;
 
-    infoEl.innerHTML = `Available in source (<span class="font-bold text-slate-800">${sourceLoc}</span>): <span class="font-bold text-blue-600">${available} ${item.unit}</span>`;
+    infoEl.innerHTML = `Available in source (<span class="font-bold text-on-surface font-data-tabular">${sourceLoc}</span>): <span class="font-bold text-primary font-data-tabular">${available} ${item.unit}</span>`;
   },
 
   handleTransferSubmit: function(e) {
@@ -1503,9 +1537,9 @@ const app = {
     const item = this.state.items.find(i => i.id === itemId);
     if (item) {
       let available = 0;
-      if (fromLoc.includes('Central')) available = item.centralStock;
-      else if (fromLoc.includes('Deneb')) available = item.denebStock;
-      else if (fromLoc.includes('Pollux')) available = item.polluxStock;
+      if (fromLoc.includes('S_001') || fromLoc.includes('21 GUN')) available = item.stockS001 || item.denebStock || 0;
+      else if (fromLoc.includes('S_002') || fromLoc.includes('PAHLE')) available = item.stockS002 || item.polluxStock || 0;
+      else available = item.centralStock || 0;
 
       if (available < qty) {
         this.showToast(`Insufficient stock in ${fromLoc}. Available: ${available}, Transfer: ${qty}`, 'error');
@@ -1516,8 +1550,11 @@ const app = {
     const data = {
       type: 'TRANSFER',
       itemId: itemId,
+      itemCode: itemId,
       sourceLocation: fromLoc,
+      fromStore: fromLoc,
       destLocation: toLoc,
+      toSellingPoint: toLoc,
       quantity: qty,
       reference: document.getElementById('transferRef').value.trim(),
       performedBy: 'Logistics Coord',

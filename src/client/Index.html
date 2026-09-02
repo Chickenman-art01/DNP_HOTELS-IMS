@@ -206,10 +206,10 @@
         <div class="hidden md:flex items-center bg-surface-container-high rounded-full px-sm py-1 border border-outline-variant/20">
           <span class="font-label-caps text-label-caps text-on-surface-variant px-sm">Store:</span>
           <select id="headerPropertyFilter" onchange="app.handlePropertyFilterChange(this.value)" class="bg-transparent text-xs font-semibold text-on-surface outline-none cursor-pointer pr-sm">
-            <option value="ALL" class="bg-surface-container-high text-on-surface">All Properties &amp; Central</option>
-            <option value="DENEB" class="bg-surface-container-high text-on-surface">Deneb Hotel Store</option>
-            <option value="POLLUX" class="bg-surface-container-high text-on-surface">Pollux Hotel Store</option>
-            <option value="CENTRAL" class="bg-surface-container-high text-on-surface">Central Warehouse</option>
+            <option value="ALL" class="bg-surface-container-high text-on-surface">All Stores &amp; Outlets</option>
+            <option value="S_001" class="bg-surface-container-high text-on-surface">21 GUN SOLUTE GGN SEC 29 (S_001)</option>
+            <option value="S_002" class="bg-surface-container-high text-on-surface">PAHLE CHAI GGN Sec 27 (S_002)</option>
+            <option value="S_000" class="bg-surface-container-high text-on-surface">Central Depot Warehouse</option>
           </select>
         </div>
 
@@ -712,19 +712,21 @@
       <!-- ========================================================== -->
       <div id="tabContent-settings" class="tab-pane hidden flex flex-col w-full gap-lg">
         
-        <!-- Google Drive Database Folder Card -->
+        <!-- Google Drive Multi-Workbook Database Ecosystem -->
         <div class="bg-surface-container-low rounded-xl border border-outline-variant/10 p-lg space-y-md">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-md border-b border-outline-variant/10">
             <div>
               <h3 class="text-headline-sm font-bold text-on-surface flex items-center gap-2">
                 <i class="fa-brands fa-google-drive text-primary text-xl"></i>
-                Google Drive Database Folder Repository
+                Multi-Workbook Database Ecosystem
               </h3>
-              <p class="font-body-sm text-on-surface-variant">Designated Google Drive repository for your IMS databases, spreadsheets, and archives.</p>
+              <p class="font-body-sm text-on-surface-variant">Bifurcated Google Drive database workbooks in your designated Drive folder.</p>
             </div>
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
-              <span class="w-1.5 h-1.5 rounded-full bg-secondary mr-1.5 animate-pulse"></span> Active Drive Repository
-            </span>
+            <a id="openDriveFolderDirectLink" href="https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition">
+              <span class="w-1.5 h-1.5 rounded-full bg-secondary mr-1.5 animate-pulse"></span>
+              <span>Open Drive Database Folder</span>
+              <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+            </a>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-md text-xs bg-surface-container-high p-md rounded-xl border border-outline-variant/10">
@@ -738,86 +740,30 @@
             </div>
           </div>
 
-          <!-- Spreadsheets Detected in Folder -->
-          <div class="space-y-sm pt-1">
+          <!-- 6 Workbooks Grid -->
+          <div class="space-y-sm pt-2">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase text-on-surface">Spreadsheets in this Drive Folder:</span>
-              <button onclick="app.refreshDriveFolderSheets()" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+              <span class="text-xs font-bold uppercase text-on-surface">Active Database Workbooks (6 Files):</span>
+              <button onclick="app.loadInitialData(true)" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
                 <span id="scanFolderIcon" class="material-symbols-outlined text-[16px]">refresh</span>
-                <span>Scan Folder</span>
+                <span>Sync Workbooks</span>
               </button>
             </div>
-            <div id="driveFolderSheetsList" class="space-y-xs">
+            <div id="workbooksGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-md">
               <!-- Rendered by JS -->
             </div>
           </div>
 
-          <!-- Custom Drive Folder URL/ID Input -->
+          <!-- Re-link Drive Folder -->
           <div class="space-y-xs pt-md border-t border-outline-variant/10">
             <label class="block text-xs font-bold uppercase text-on-surface">Change / Re-link Drive Folder (URL or ID):</label>
             <div class="flex flex-col sm:flex-row gap-xs">
               <input type="text" id="customDriveFolderInput" placeholder="https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx" class="flex-1 px-md py-2 bg-surface-container-high rounded-lg text-xs border border-outline-variant/20 text-on-surface focus:outline-none focus:border-primary">
               <button onclick="app.connectCustomDriveFolder()" class="bg-primary-container text-on-primary-container font-semibold text-xs px-md py-2 rounded-lg transition flex items-center justify-center gap-1.5 shadow">
                 <i class="fa-brands fa-google-drive"></i>
-                <span>Link Folder</span>
+                <span>Re-link Folder</span>
               </button>
             </div>
-          </div>
-
-          <div class="pt-sm flex flex-wrap items-center gap-md border-t border-outline-variant/10">
-            <a id="openDriveFolderDirectLink" href="https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx" target="_blank" class="inline-flex items-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-primary border border-outline-variant/20 px-md py-2 rounded-lg text-xs font-semibold transition">
-              <i class="fa-brands fa-google-drive"></i>
-              <span>Open Google Drive Folder in New Tab</span>
-              <span class="material-symbols-outlined text-[14px]">open_in_new</span>
-            </a>
-          </div>
-        </div>
-
-        <!-- Google Sheet Database Connection Card -->
-        <div class="bg-surface-container-low rounded-xl border border-outline-variant/10 p-lg space-y-md">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-md border-b border-outline-variant/10">
-            <div>
-              <h3 class="text-headline-sm font-bold text-on-surface flex items-center gap-2">
-                <span class="material-symbols-outlined text-secondary">table_view</span>
-                Active Google Sheet Database
-              </h3>
-              <p class="font-body-sm text-on-surface-variant">Primary spreadsheet storing items, transactions, suppliers, and hotel departments.</p>
-            </div>
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-secondary-container/20 text-secondary border border-secondary/20">
-              <span class="w-1.5 h-1.5 rounded-full bg-secondary mr-1.5"></span> Connected
-            </span>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-md text-xs bg-surface-container-high p-md rounded-xl border border-outline-variant/10">
-            <div>
-              <span class="text-outline uppercase font-label-caps">Spreadsheet Name:</span>
-              <p id="settingsDbName" class="text-on-surface font-bold text-body-md mt-0.5">--</p>
-            </div>
-            <div>
-              <span class="text-outline uppercase font-label-caps">Spreadsheet ID:</span>
-              <p id="settingsDbId" class="text-on-surface-variant font-data-tabular text-xs mt-0.5 truncate select-all">--</p>
-            </div>
-          </div>
-
-          <div class="space-y-xs pt-xs">
-            <label class="block text-xs font-bold uppercase text-on-surface">Connect Custom Sheet URL or ID:</label>
-            <div class="flex flex-col sm:flex-row gap-xs">
-              <input type="text" id="customSheetInput" placeholder="Paste Google Sheet URL (https://docs.google.com/spreadsheets/d/...) or ID" class="flex-1 px-md py-2 bg-surface-container-high rounded-lg text-xs border border-outline-variant/20 text-on-surface focus:outline-none focus:border-primary">
-              <button onclick="app.connectCustomSheet()" class="bg-secondary-container/30 hover:bg-secondary-container/40 text-secondary font-semibold text-xs px-md py-2 rounded-lg transition border border-secondary/30">
-                Connect Sheet
-              </button>
-            </div>
-          </div>
-
-          <div class="pt-sm flex flex-wrap items-center gap-md border-t border-outline-variant/10">
-            <a id="settingsDirectSheetLink" href="#" target="_blank" class="inline-flex items-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface border border-outline-variant/20 px-md py-2 rounded-lg text-xs font-semibold transition">
-              <span class="material-symbols-outlined text-secondary text-[16px]">open_in_new</span>
-              <span>Open Spreadsheet in New Tab</span>
-            </a>
-            <button onclick="app.reseedDemoData()" class="inline-flex items-center gap-1.5 bg-tertiary-container/20 hover:bg-tertiary-container/30 text-tertiary border border-tertiary/20 px-md py-2 rounded-lg text-xs font-semibold transition">
-              <span class="material-symbols-outlined text-[16px]">refresh</span>
-              <span>Re-seed Sample Hotel Data</span>
-            </button>
           </div>
         </div>
 

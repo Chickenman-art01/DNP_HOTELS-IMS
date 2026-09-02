@@ -1,20 +1,21 @@
 /**
- * DNP HOTELS - IMS Database & Spreadsheet Management
+ * DNP HOTELS - Multi-Workbook Database Architecture
+ * Manages bifurcated workbooks inside Google Drive Folder: 1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx
  */
-
-const SHEET_NAMES = {
-  ITEMS: 'Items',
-  TRANSACTIONS: 'Transactions',
-  SUPPLIERS: 'Suppliers',
-  DEPARTMENTS: 'Departments',
-  LOCATIONS: 'Locations',
-  SETTINGS: 'Settings'
-};
 
 const DEFAULT_DRIVE_FOLDER_ID = '1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx';
 
+const WORKBOOKS = {
+  LOCATION_MASTER: 'Location_Master',
+  PRODUCT_MASTER: 'Product_Master',
+  SUPPLIER_MASTER: 'Supplier_Master',
+  SUPPLIER_TXNS: 'Supplier_Transactions',
+  ISSUANCE_TXNS: 'Issuance_Transactions',
+  USERS_SETTINGS: 'Users_and_Settings'
+};
+
 /**
- * Gets the connected Google Drive folder for database storage
+ * Gets the designated Google Drive Folder
  */
 function getDriveFolder() {
   const props = PropertiesService.getScriptProperties();
@@ -22,449 +23,437 @@ function getDriveFolder() {
   try {
     return DriveApp.getFolderById(folderId);
   } catch (err) {
-    console.warn('Could not access Google Drive folder by ID: ' + folderId, err);
+    console.warn('Could not open Drive folder: ' + folderId, err);
     return null;
   }
 }
 
 /**
- * Scans the Google Drive folder for all spreadsheets
+ * Formats table header row with luxury styling
  */
-function getFolderSheets() {
-  const folder = getDriveFolder();
-  if (!folder) return [];
-  const sheets = [];
+function formatHeaderRow(sheet, numCols) {
+  const range = sheet.getRange(1, 1, 1, numCols);
+  range.setBackground('#11131b');
+  range.setFontColor('#b4c5ff');
+  range.setFontWeight('bold');
+  range.setFontFamily('Roboto');
+  range.setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
   try {
-    const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
-    while (files.hasNext()) {
-      const f = files.next();
-      sheets.push({
-        id: f.getId(),
-        name: f.getName(),
-        url: f.getUrl(),
-        lastUpdated: f.getLastUpdated().toISOString()
-      });
+    for (let c = 1; c <= numCols; c++) {
+      sheet.autoResizeColumn(c);
     }
-  } catch (err) {
-    console.warn('Error fetching sheets in Drive folder', err);
-  }
-  return sheets;
+  } catch (e) {}
 }
 
 /**
- * Updates the designated Google Drive folder ID or URL
+ * Gets or creates a specific workbook inside the Google Drive folder
  */
-function setDriveFolderId(folderUrlOrId) {
-  if (!folderUrlOrId || typeof folderUrlOrId !== 'string') {
-    return { success: false, error: 'Please provide a valid Google Drive folder URL or ID.' };
-  }
-  let folderId = folderUrlOrId.trim();
-  const match = folderId.match(/\/folders\/([a-zA-Z0-9-_]+)/);
-  if (match && match[1]) {
-    folderId = match[1];
-  }
-  try {
-    const folder = DriveApp.getFolderById(folderId);
-    PropertiesService.getScriptProperties().setProperty('DRIVE_FOLDER_ID', folderId);
-    return {
-      success: true,
-      id: folderId,
-      name: folder.getName(),
-      url: folder.getUrl(),
-      message: 'Connected to Drive folder: ' + folder.getName()
-    };
-  } catch (err) {
-    return {
-      success: false,
-      error: 'Could not access the specified Google Drive folder. Please verify permissions. Details: ' + err.message
-    };
-  }
-}
-
-/**
- * Gets or initializes the connected Google Spreadsheet.
- * If not connected or invalid, checks the Drive folder or creates a new spreadsheet inside it.
- */
-function getSpreadsheet() {
+function getWorkbook(name) {
   const props = PropertiesService.getScriptProperties();
-  let sheetId = props.getProperty('SPREADSHEET_ID');
-  let ss = null;
-
-  if (sheetId) {
+  const cachedId = props.getProperty('WB_ID_' + name);
+  if (cachedId) {
     try {
-      ss = SpreadsheetApp.openById(sheetId);
-    } catch (err) {
-      console.warn('Could not open spreadsheet by saved ID: ' + sheetId, err);
-      ss = null;
-    }
-  }
-
-  // If container-bound, try active spreadsheet
-  if (!ss) {
-    try {
-      const active = SpreadsheetApp.getActiveSpreadsheet();
-      if (active) {
-        ss = active;
-        sheetId = ss.getId();
-        props.setProperty('SPREADSHEET_ID', sheetId);
-      }
+      return SpreadsheetApp.openById(cachedId);
     } catch (e) {
-      // Standalone script
+      // Cached ID was deleted or inaccessible, will re-fetch
     }
   }
 
-  // Check designated Google Drive folder for existing sheets
   const folder = getDriveFolder();
-
-  if (!ss && folder) {
-    try {
-      const folderSheets = getFolderSheets();
-      if (folderSheets.length > 0) {
-        const match = folderSheets.find(s => s.name.toUpperCase().includes('IMS') || s.name.toUpperCase().includes('DATABASE')) || folderSheets[0];
-        ss = SpreadsheetApp.openById(match.id);
-        sheetId = ss.getId();
-        props.setProperty('SPREADSHEET_ID', sheetId);
-      }
-    } catch (e) {
-      console.warn('Could not auto-detect sheet from folder', e);
+  if (folder) {
+    const files = folder.getFilesByName(name);
+    if (files.hasNext()) {
+      const file = files.next();
+      const ss = SpreadsheetApp.openById(file.getId());
+      props.setProperty('WB_ID_' + name, ss.getId());
+      return ss;
     }
   }
 
-  // If still not available, create a new spreadsheet directly inside the Drive folder
-  if (!ss) {
+  // Not found in folder, create and initialize it
+  return createAndInitWorkbook(name);
+}
+
+/**
+ * Creates and sets up initial schema & sample data for a workbook
+ */
+function createAndInitWorkbook(name) {
+  const folder = getDriveFolder();
+  const ss = SpreadsheetApp.create(name);
+  const ssId = ss.getId();
+  PropertiesService.getScriptProperties().setProperty('WB_ID_' + name, ssId);
+
+  // Move into Drive folder
+  if (folder) {
     try {
-      ss = SpreadsheetApp.create('DNP HOTELS - IMS Database');
-      sheetId = ss.getId();
-      props.setProperty('SPREADSHEET_ID', sheetId);
-
-      if (folder) {
-        try {
-          const file = DriveApp.getFileById(sheetId);
-          file.moveTo(folder);
-        } catch (e) {
-          console.warn('Could not move new database into Drive folder', e);
-        }
-      }
-
-      initDatabase(ss);
-      seedSampleDataIfEmpty(ss);
+      const file = DriveApp.getFileById(ssId);
+      file.moveTo(folder);
     } catch (err) {
-      console.error('Failed to create new spreadsheet', err);
-      throw new Error('Unable to access or create Google Sheet database: ' + err.message);
+      console.warn('Could not move workbook to Drive folder', err);
     }
-  } else {
-    // Ensure spreadsheet is housed in the configured Drive folder
-    if (folder && sheetId) {
-      try {
-        const file = DriveApp.getFileById(sheetId);
-        const parents = file.getParents();
-        let inFolder = false;
-        while (parents.hasNext()) {
-          if (parents.next().getId() === folder.getId()) {
-            inFolder = true;
-            break;
-          }
-        }
-        if (!inFolder) {
-          file.moveTo(folder);
-        }
-      } catch (e) {}
-    }
+  }
 
-    initDatabase(ss);
+  // Schema initialization based on workbook type
+  if (name === WORKBOOKS.LOCATION_MASTER) {
+    initLocationMaster(ss);
+  } else if (name === WORKBOOKS.PRODUCT_MASTER) {
+    initProductMaster(ss);
+  } else if (name === WORKBOOKS.SUPPLIER_MASTER) {
+    initSupplierMaster(ss);
+  } else if (name === WORKBOOKS.SUPPLIER_TXNS) {
+    initSupplierTransactions(ss);
+  } else if (name === WORKBOOKS.ISSUANCE_TXNS) {
+    initIssuanceTransactions(ss);
+  } else if (name === WORKBOOKS.USERS_SETTINGS) {
+    initUsersAndSettings(ss);
   }
 
   return ss;
 }
 
 /**
- * Validates and ensures all necessary sheets and columns exist.
+ * 1. Location_Master Workbook (Store & Selling_Point sheets)
  */
-function initDatabase(ss) {
-  // 1. Items Sheet
-  let itemsSheet = ss.getSheetByName(SHEET_NAMES.ITEMS);
-  if (!itemsSheet) {
-    itemsSheet = ss.insertSheet(SHEET_NAMES.ITEMS);
-    itemsSheet.appendRow([
-      'Item ID',
-      'SKU / Barcode',
-      'Item Name',
+function initLocationMaster(ss) {
+  // Sheet 1: Store
+  let storeSheet = ss.getSheetByName('Store');
+  if (!storeSheet) {
+    storeSheet = ss.getSheets()[0];
+    storeSheet.setName('Store');
+  }
+  if (storeSheet.getLastRow() === 0) {
+    storeSheet.appendRow(['Store Code', 'Store Name', 'Type', 'Status', 'Description']);
+    formatHeaderRow(storeSheet, 5);
+    storeSheet.appendRow(['S_001', '21 GUN SOLUTE GGN SEC 29', 'Main Outlet Store', 'Active', 'Sector 29 Gurgaon Property']);
+    storeSheet.appendRow(['S_002', 'PAHLE CHAI GGN Sec 27', 'Outlet Store', 'Active', 'Sector 27 Gurgaon Outlet']);
+    storeSheet.appendRow(['S_000', 'Central Depot Warehouse', 'Central Depot', 'Active', 'Central Replenishment Warehouse']);
+  }
+
+  // Sheet 2: Selling_Point
+  let spSheet = ss.getSheetByName('Selling_Point');
+  if (!spSheet) {
+    spSheet = ss.insertSheet('Selling_Point');
+  }
+  if (spSheet.getLastRow() === 0) {
+    spSheet.appendRow(['Selling Point Code', 'Selling Point Name', 'Assigned Store Code', 'Type', 'Status']);
+    formatHeaderRow(spSheet, 5);
+    spSheet.appendRow(['SP_001', '21 GUN SOLUTE GGN SEC 29', 'S_001', 'Dining & Bar', 'Active']);
+    spSheet.appendRow(['SP_002', 'PAHLE CHAI GGN Sec 27', 'S_002', 'Chai & Cafe Counter', 'Active']);
+    spSheet.appendRow(['SP_003', '21 Gun Salute - Kitchen Store', 'S_001', 'F&B Production', 'Active']);
+    spSheet.appendRow(['SP_004', '21 Gun Salute - Bar & Lounge', 'S_001', 'Beverage Counter', 'Active']);
+  }
+}
+
+/**
+ * 2. Product_Master Workbook (Product_Master sheet)
+ */
+function initProductMaster(ss) {
+  let prodSheet = ss.getSheetByName('Product_Master');
+  if (!prodSheet) {
+    prodSheet = ss.getSheets()[0];
+    prodSheet.setName('Product_Master');
+  }
+
+  if (prodSheet.getLastRow() === 0) {
+    prodSheet.appendRow([
+      'Item Code',
+      'Item Description',
       'Category',
-      'Unit',
+      'Category Code',
+      'UOM',
+      'Rate',
+      'TAX %',
       'Min Stock',
+      'Stock S_001',
+      'Stock S_002',
       'Central Stock',
-      'Deneb Stock',
-      'Pollux Stock',
       'Total Stock',
-      'Unit Cost',
-      'Total Value',
-      'Primary Supplier',
-      'Storage Location',
+      'Total Valuation',
+      'Preferred Supplier Code',
       'Status',
       'Last Updated'
     ]);
-    formatHeaderRow(itemsSheet, 16);
+    formatHeaderRow(prodSheet, 16);
+
+    const nowIso = new Date().toISOString();
+    const demoItems = [
+      ['ITM_001', 'Special Assam Orthodox Tea Leaves', 'Tea & Beverages', 'CAT_TEA', 'Kg', 650, 5, 10, 25, 15, 40, 80, 52000, 'SUP_021', 'Active', nowIso],
+      ['ITM_002', 'Fresh Cow Milk 1L Pack', 'Dairy & Fresh', 'CAT_DAI', 'Pack', 65, 0, 30, 40, 30, 50, 120, 7800, 'SUP_004', 'Active', nowIso],
+      ['ITM_003', 'Fresh Malai Paneer Block', 'Dairy & Fresh', 'CAT_DAI', 'Kg', 380, 0, 15, 15, 10, 20, 45, 17100, 'SUP_004', 'Active', nowIso],
+      ['ITM_004', 'Artisan Multigrain Bread Loaf', 'Bakery & Desserts', 'CAT_BAK', 'Loaf', 90, 5, 20, 20, 15, 15, 50, 4500, 'SUP_005', 'Active', nowIso],
+      ['ITM_005', 'Kesar Pista Kulfi Sticks', 'Bakery & Desserts', 'CAT_BAK', 'Pcs', 45, 18, 50, 60, 40, 50, 150, 6750, 'SUP_014', 'Active', nowIso],
+      ['ITM_006', 'Hardwood Charcoal Briquettes 10kg', 'Kitchen Fuel', 'CAT_FUE', 'Bags', 850, 18, 10, 15, 5, 15, 35, 29750, 'SUP_008', 'Active', nowIso],
+      ['ITM_007', 'Heavy Duty Floor Cleaner 5L', 'Housekeeping & Hygiene', 'CAT_HK', 'Can', 550, 18, 10, 10, 5, 10, 25, 13750, 'SUP_024', 'Active', nowIso],
+      ['ITM_008', 'A4 Executive Copier Paper 75GSM', 'Stationery & Office', 'CAT_STA', 'Ream', 280, 12, 10, 10, 5, 15, 30, 8400, 'SUP_006', 'Active', nowIso],
+      ['ITM_009', 'LED Warm Spotlight 12W GU10', 'Engineering & Electrical', 'CAT_ENG', 'Pcs', 195, 18, 15, 15, 10, 15, 40, 7800, 'SUP_009', 'Active', nowIso],
+      ['ITM_010', 'Packaged Drinking Water 500ml (Crate 24)', 'Beverages', 'CAT_BEV', 'Crate', 240, 18, 20, 25, 15, 20, 60, 14400, 'SUP_003', 'Active', nowIso],
+      ['ITM_011', 'Basmati Rice Classic 25kg Bag', 'Grocery & Staples', 'CAT_GRO', 'Bags', 2400, 5, 5, 8, 4, 6, 18, 43200, 'SUP_019', 'Active', nowIso],
+      ['ITM_012', 'Signature Chai Cardboard Cups 150ml (Pack 100)', 'Packaging & Disposables', 'CAT_PAC', 'Pack', 180, 18, 30, 40, 30, 20, 90, 16200, 'SUP_023', 'Active', nowIso]
+    ];
+
+    prodSheet.getRange(2, 1, demoItems.length, demoItems[0].length).setValues(demoItems);
+  }
+}
+
+/**
+ * 3. Supplier_Master Workbook (all 28 real suppliers)
+ */
+function initSupplierMaster(ss) {
+  let supSheet = ss.getSheetByName('Supplier_Master');
+  if (!supSheet) {
+    supSheet = ss.getSheets()[0];
+    supSheet.setName('Supplier_Master');
   }
 
-  // 2. Transactions Sheet
-  let txnSheet = ss.getSheetByName(SHEET_NAMES.TRANSACTIONS);
-  if (!txnSheet) {
-    txnSheet = ss.insertSheet(SHEET_NAMES.TRANSACTIONS);
-    txnSheet.appendRow([
+  if (supSheet.getLastRow() === 0) {
+    supSheet.appendRow(['Supplier Code', 'Supplier Name', 'Category', 'Contact Person', 'Phone', 'Email', 'Status']);
+    formatHeaderRow(supSheet, 7);
+
+    const suppliersData = [
+      ['SUP_001', 'A.T. Overseas', 'Imported Gourmet & Dry Foods', 'Mr. Amit Thapar', '+91 98101 23456', 'sales@atoverseas.com', 'Active'],
+      ['SUP_002', 'Agarwal Enterprises', 'Provisions & Kirana', 'Mr. R. K. Agarwal', '+91 98112 34567', 'agarwal.ent@gmail.com', 'Active'],
+      ['SUP_003', 'Ajay Cold Drinks', 'Beverages & Soft Drinks', 'Mr. Ajay Verma', '+91 98123 45678', 'ajaycolddrinks@yahoo.com', 'Active'],
+      ['SUP_004', 'Bankey Behari Dairy & Paneer Bhandar', 'Fresh Dairy, Paneer & Mawa', 'Mr. Bankey Lal', '+91 98134 56789', 'bbdairy@gmail.com', 'Active'],
+      ['SUP_005', "Chef's Bakeology Ifo Dayal Singh", 'Breads, Buns & Pastries', 'Chef Dayal Singh', '+91 98145 67890', 'bakeology@outlook.com', 'Active'],
+      ['SUP_006', 'Deepak Stationery Mart', 'Office Stationery & Billing Paper', 'Mr. Deepak Jain', '+91 98156 78901', 'deepakstationery@gmail.com', 'Active'],
+      ['SUP_007', 'Design Xpress', 'Menu Cards, Collateral & Printing', 'Mr. Nitin Saxena', '+91 98167 89012', 'print@designxpress.in', 'Active'],
+      ['SUP_008', 'Essel Charcoals', 'Tandoor Charcoal & Fuel', 'Mr. S. L. Singhania', '+91 98178 90123', 'esselcharcoals@gmail.com', 'Active'],
+      ['SUP_009', 'Friends Electric Works', 'Lighting, Bulbs & Electricals', 'Mr. Joginder Pal', '+91 98189 01234', 'friendselectric@gmail.com', 'Active'],
+      ['SUP_010', 'Goodwill Traders', 'General Hospitality Hardware', 'Mr. Manpreet Singh', '+91 98190 12345', 'goodwilltraders@gmail.com', 'Active'],
+      ['SUP_011', 'Hari Shankar Singh', 'Vegetables & Fresh Greens', 'Mr. Hari Shankar', '+91 98201 23456', 'harishankar.fresh@gmail.com', 'Active'],
+      ['SUP_012', 'Hot Cakes Private Limited', 'Confectionery & Special Cakes', 'Ms. Ananya Roy', '+91 98212 34567', 'orders@hotcakes.co.in', 'Active'],
+      ['SUP_013', 'Jai Guru Ji Traders', 'Spices, Masala & Seasonings', 'Mr. Gurpreet Sethi', '+91 98223 45678', 'jaigurujitraders@gmail.com', 'Active'],
+      ['SUP_014', 'K B Kulfi', 'Traditional Kulfi & Ice Creams', 'Mr. Kailash B.', '+91 98234 56789', 'kbkulfi@gmail.com', 'Active'],
+      ['SUP_015', 'Kanshi Ram Enterprises', 'Commercial Kitchen Crockery', 'Mr. Kanshi Ram', '+91 98245 67890', 'krrkitchenware@gmail.com', 'Active'],
+      ['SUP_016', 'L R Wholesale Services Pvt. Ltd.', 'Bulk Institutional Supplies', 'Mr. Lalit Rao', '+91 98256 78901', 'info@lrwholesale.com', 'Active'],
+      ['SUP_017', 'M S Manufactures and Distributors Pvt Ltd.', 'Linens & Table Runners', 'Mr. M. S. Sodhi', '+91 98267 89012', 'msdistributors@gmail.com', 'Active'],
+      ['SUP_018', 'MR International', 'Premium Cutlery & Holloware', 'Mr. Manish Rawat', '+91 98278 90123', 'mrinternational@gmail.com', 'Active'],
+      ['SUP_019', 'Navpallav Agro Products Pvt. Ltd', 'Grains, Basmati Rice & Pulses', 'Mr. Pallav Gupta', '+91 98289 01234', 'agro@navpallav.com', 'Active'],
+      ['SUP_020', 'New Harry Store', 'Imported Condiments & Syrups', 'Mr. Harinder Suri', '+91 98290 12345', 'harrystore@gmail.com', 'Active'],
+      ['SUP_021', 'Pindi Kirana Store', 'Premium Tea, Sugar & Dry Grocery', 'Mr. Satish Pindi', '+91 98301 23456', 'pindikirana@gmail.com', 'Active'],
+      ['SUP_022', 'Rajesh Kumar (29 Jaguar)', 'Poultry & Fresh Meats', 'Mr. Rajesh Kumar', '+91 98312 34567', 'rajesh29jaguar@gmail.com', 'Active'],
+      ['SUP_023', 'Sms Commercial', 'Takeaway Cups, Boxes & Disposables', 'Mr. Sanjay Mishra', '+91 98323 45678', 'smscommercial@gmail.com', 'Active'],
+      ['SUP_024', 'Sms Housekeeping', 'Cleaning Chemicals & Detergents', 'Mr. S. M. Sharma', '+91 98334 56789', 'smshk@gmail.com', 'Active'],
+      ['SUP_025', 'Sms Marketing Solutions', 'Branded Signage & Packaging', 'Mr. Shivam Malhotra', '+91 98345 67890', 'smsmarketing@gmail.com', 'Active'],
+      ['SUP_026', 'SRD Traders', 'Cooking Oils & Ghee', 'Mr. Suresh Dani', '+91 98356 78901', 'srdtraders@gmail.com', 'Active'],
+      ['SUP_027', 'T K Traders', 'Cleaning Tools, Brooms & Mops', 'Mr. Tarun Kalra', '+91 98367 89012', 'tktraders@gmail.com', 'Active'],
+      ['SUP_028', 'Tulip Enterprises', 'Tissue Paper, Napkins & Foil', 'Ms. Meenakshi Tulip', '+91 98378 90123', 'tulipenterprises@gmail.com', 'Active']
+    ];
+
+    supSheet.getRange(2, 1, suppliersData.length, suppliersData[0].length).setValues(suppliersData);
+  }
+}
+
+/**
+ * 4. Supplier_Transactions Workbook (Supplier-wise Purchasing & Stock In)
+ */
+function initSupplierTransactions(ss) {
+  let sheet = ss.getSheetByName('Supplier_Transactions');
+  if (!sheet) {
+    sheet = ss.getSheets()[0];
+    sheet.setName('Supplier_Transactions');
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
       'Transaction ID',
       'Timestamp',
-      'Type',
-      'Item ID',
-      'SKU',
-      'Item Name',
+      'Supplier Code',
+      'Supplier Name',
+      'Item Code',
+      'Item Description',
       'Category',
       'Quantity',
-      'Unit',
-      'Source Location',
-      'Destination / Dept',
-      'Unit Price',
-      'Total Cost',
-      'Reference / PO',
-      'Performed By',
+      'UOM',
+      'Rate',
+      'Tax %',
+      'Total Amount',
+      'Receiving Store Code',
+      'Receiving Store Name',
+      'PO / Invoice Ref',
+      'Received By',
       'Notes'
     ]);
-    formatHeaderRow(txnSheet, 16);
+    formatHeaderRow(sheet, 17);
+
+    const now = new Date();
+    const demoTxns = [
+      ['TXN_SUP_001', new Date(now.getTime() - 86400000 * 3).toISOString(), 'SUP_004', 'Bankey Behari Dairy & Paneer Bhandar', 'ITM_003', 'Fresh Malai Paneer Block', 'Dairy & Fresh', 30, 'Kg', 380, 0, 11400, 'S_001', '21 GUN SOLUTE GGN SEC 29', 'INV-BBD-991', 'Head Chef', 'Morning delivery received in cold crate'],
+      ['TXN_SUP_002', new Date(now.getTime() - 86400000 * 2).toISOString(), 'SUP_021', 'Pindi Kirana Store', 'ITM_001', 'Special Assam Orthodox Tea Leaves', 'Tea & Beverages', 40, 'Kg', 650, 5, 27300, 'S_000', 'Central Depot Warehouse', 'PO-2026-441', 'Store Keeper', 'Monthly bulk tea consignment'],
+      ['TXN_SUP_003', new Date(now.getTime() - 86400000 * 1).toISOString(), 'SUP_023', 'Sms Commercial', 'ITM_012', 'Signature Chai Cardboard Cups 150ml (Pack 100)', 'Packaging & Disposables', 50, 'Pack', 180, 18, 10620, 'S_002', 'PAHLE CHAI GGN Sec 27', 'INV-SMS-802', 'Outlet Mgr', 'Restock for takeaway chai counter'],
+      ['TXN_SUP_004', new Date(now.getTime() - 3600000 * 4).toISOString(), 'SUP_008', 'Essel Charcoals', 'ITM_006', 'Hardwood Charcoal Briquettes 10kg', 'Kitchen Fuel', 20, 'Bags', 850, 18, 20060, 'S_001', '21 GUN SOLUTE GGN SEC 29', 'INV-EC-109', 'Tandoor Chef', 'High calorific value coal batch']
+    ];
+
+    sheet.getRange(2, 1, demoTxns.length, demoTxns[0].length).setValues(demoTxns);
+  }
+}
+
+/**
+ * 5. Issuance_Transactions Workbook (Store to Selling Point & Department Issues)
+ */
+function initIssuanceTransactions(ss) {
+  let sheet = ss.getSheetByName('Issuance_Transactions');
+  if (!sheet) {
+    sheet = ss.getSheets()[0];
+    sheet.setName('Issuance_Transactions');
   }
 
-  // 3. Suppliers Sheet
-  let supSheet = ss.getSheetByName(SHEET_NAMES.SUPPLIERS);
-  if (!supSheet) {
-    supSheet = ss.insertSheet(SHEET_NAMES.SUPPLIERS);
-    supSheet.appendRow([
-      'Supplier ID',
-      'Supplier Name',
-      'Contact Person',
-      'Email',
-      'Phone',
-      'Category Supplied',
-      'Address',
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      'Issuance ID',
+      'Timestamp',
+      'Type',
+      'Item Code',
+      'Item Description',
+      'Quantity',
+      'UOM',
+      'From Store Code',
+      'From Store Name',
+      'To Selling Point Code',
+      'To Selling Point Name',
+      'Unit Rate',
+      'Total Value',
+      'Requisition Ref',
+      'Issued By',
       'Status',
       'Notes'
     ]);
-    formatHeaderRow(supSheet, 9);
-  }
+    formatHeaderRow(sheet, 17);
 
-  // 4. Departments Sheet
-  let deptSheet = ss.getSheetByName(SHEET_NAMES.DEPARTMENTS);
-  if (!deptSheet) {
-    deptSheet = ss.insertSheet(SHEET_NAMES.DEPARTMENTS);
-    deptSheet.appendRow([
-      'Department ID',
-      'Department Name',
-      'Property Scope',
-      'Head of Department',
-      'Notes'
-    ]);
-    formatHeaderRow(deptSheet, 5);
-  }
-
-  // 5. Locations Sheet
-  let locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
-  if (!locSheet) {
-    locSheet = ss.insertSheet(SHEET_NAMES.LOCATIONS);
-    locSheet.appendRow([
-      'Location ID',
-      'Location Name',
-      'Code',
-      'Type',
-      'Description'
-    ]);
-    formatHeaderRow(locSheet, 5);
-  }
-
-  // 6. Settings Sheet
-  let setSheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
-  if (!setSheet) {
-    setSheet = ss.insertSheet(SHEET_NAMES.SETTINGS);
-    setSheet.appendRow(['Key', 'Value', 'Description']);
-    formatHeaderRow(setSheet, 3);
-    setSheet.appendRow(['CURRENCY_SYMBOL', '₹', 'Display currency symbol']);
-    setSheet.appendRow(['HOTEL_NAME', 'DNP HOTELS', 'Organization title']);
-    setSheet.appendRow(['LOW_STOCK_THRESHOLD_DEFAULT', '10', 'Default minimum alert threshold']);
-  }
-
-  const sheet1 = ss.getSheetByName('Sheet1');
-  if (sheet1 && ss.getSheets().length > 1) {
-    try {
-      ss.deleteSheet(sheet1);
-    } catch (e) {}
-  }
-}
-
-function formatHeaderRow(sheet, colCount) {
-  const headerRange = sheet.getRange(1, 1, 1, colCount);
-  headerRange.setBackground('#0F172A')
-    .setFontColor('#FFFFFF')
-    .setFontWeight('bold')
-    .setFontSize(10)
-    .setHorizontalAlignment('center');
-  sheet.setFrozenRows(1);
-}
-
-function seedSampleDataIfEmpty(ss) {
-  const itemsSheet = ss.getSheetByName(SHEET_NAMES.ITEMS);
-  if (itemsSheet && itemsSheet.getLastRow() <= 1) {
-    const demoItems = [
-      ['ITM-1001', 'DP-HK-001', 'King Size Bed Sheet 400TC (White)', 'Housekeeping & Linens', 'Pcs', 20, 50, 25, 20, 95, 1200, 114000, 'Apex Hospitality Linens', 'Aisle 1 - Shelf A', 'Active', new Date().toISOString()],
-      ['ITM-1002', 'DP-HK-002', 'Bath Towel 700GSM Luxury Cotton', 'Housekeeping & Linens', 'Pcs', 30, 80, 40, 35, 155, 650, 100750, 'Apex Hospitality Linens', 'Aisle 1 - Shelf B', 'Active', new Date().toISOString()],
-      ['ITM-1003', 'DP-AM-001', 'Organic Shampoo 30ml Eco-Bottle', 'Guest Amenities & Toiletries', 'Bottles', 100, 400, 150, 120, 670, 25, 16750, 'Luxe Spa & Botanicals', 'Aisle 2 - Shelf A', 'Active', new Date().toISOString()],
-      ['ITM-1004', 'DP-AM-002', 'Organic Body Wash 30ml Eco-Bottle', 'Guest Amenities & Toiletries', 'Bottles', 100, 350, 130, 110, 590, 25, 14750, 'Luxe Spa & Botanicals', 'Aisle 2 - Shelf A', 'Active', new Date().toISOString()],
-      ['ITM-1005', 'DP-AM-003', 'Dental Kit with Bamboo Toothbrush', 'Guest Amenities & Toiletries', 'Packs', 80, 250, 90, 80, 420, 35, 14700, 'Luxe Spa & Botanicals', 'Aisle 2 - Shelf B', 'Active', new Date().toISOString()],
-      ['ITM-1006', 'DP-FB-001', 'Arabica Dark Roast Coffee Beans 1kg', 'Food & Beverage', 'Bags', 15, 40, 12, 10, 62, 1100, 68200, 'Estate Harvest Roasters', 'Pantry 1 - Cool Rack', 'Active', new Date().toISOString()],
-      ['ITM-1007', 'DP-FB-002', 'Twinings Earl Grey Tea (100 Bags)', 'Food & Beverage', 'Boxes', 10, 30, 8, 7, 45, 680, 30600, 'Estate Harvest Roasters', 'Pantry 1 - Shelf C', 'Active', new Date().toISOString()],
-      ['ITM-1008', 'DP-FB-003', 'Organic Extra Virgin Olive Oil 5L', 'Food & Beverage', 'Tins', 8, 20, 6, 5, 31, 3200, 99200, 'Gourmet Pantry Supplies', 'Kitchen Dry Store', 'Active', new Date().toISOString()],
-      ['ITM-1009', 'DP-FO-001', 'RFID Keycards (DNP Branded)', 'Front Office & Stationery', 'Cards', 200, 600, 200, 150, 950, 45, 42750, 'TechSmart RFID Systems', 'Front Desk Safe', 'Active', new Date().toISOString()],
-      ['ITM-1010', 'DP-FO-002', 'A4 Executive Hotel Letterhead (500s)', 'Front Office & Stationery', 'Reams', 5, 15, 5, 4, 24, 450, 10800, 'PrintCraft Media', 'Admin Supply Room', 'Active', new Date().toISOString()],
-      ['ITM-1011', 'DP-MN-001', 'LED Bulb 9W Warm White E27', 'Maintenance & Engineering', 'Pcs', 25, 60, 15, 12, 87, 140, 12180, 'ElectroTech Solutions', 'Maintenance Store Bay 4', 'Active', new Date().toISOString()],
-      ['ITM-1012', 'DP-MN-002', 'HVAC Air Filter 20x20 High Efficiency', 'Maintenance & Engineering', 'Pcs', 12, 30, 8, 6, 44, 450, 19800, 'ElectroTech Solutions', 'HVAC Plant Room', 'Active', new Date().toISOString()],
-      ['ITM-1013', 'DP-CL-001', 'Commercial Multi-Surface Cleaner 5L', 'Cleaning & Chemicals', 'Cans', 10, 25, 8, 7, 40, 850, 34000, 'HygieneFirst Chemicals', 'Chemical Bunker 2', 'Active', new Date().toISOString()],
-      ['ITM-1014', 'DP-CL-002', 'High Efficiency Laundry Detergent 25kg', 'Cleaning & Chemicals', 'Drums', 4, 10, 3, 2, 15, 3800, 57000, 'HygieneFirst Chemicals', 'Laundry Bay Store', 'Active', new Date().toISOString()],
-      ['ITM-1015', 'DP-BV-001', 'Cabernet Sauvignon Reserve 750ml', 'Bar & Beverages', 'Bottles', 12, 48, 18, 14, 80, 1800, 144000, 'Vintage Wine Merchants', 'Cellar Bin 12', 'Active', new Date().toISOString()]
-    ];
-    itemsSheet.getRange(2, 1, demoItems.length, demoItems[0].length).setValues(demoItems);
-  }
-
-  // Seed Suppliers
-  const supSheet = ss.getSheetByName(SHEET_NAMES.SUPPLIERS);
-  if (supSheet && supSheet.getLastRow() <= 1) {
-    const demoSuppliers = [
-      ['SUP-101', 'Apex Hospitality Linens', 'Rahul Sharma', 'orders@apexlinens.com', '+91 98765 43210', 'Housekeeping & Linens', 'Plot 45, Textile Park, Mumbai', 'Active', 'Contracted vendor with 15-day Net payment terms'],
-      ['SUP-102', 'Luxe Spa & Botanicals', 'Priya Menon', 'supply@luxebotanicals.com', '+91 98234 56789', 'Guest Amenities & Toiletries', 'Indl Area Phase 2, Bengaluru', 'Active', 'Eco-friendly certified amenities supplier'],
-      ['SUP-103', 'Estate Harvest Roasters', 'Vikram Sen', 'b2b@estateharvest.com', '+91 97112 34567', 'Food & Beverage', 'Estate Road, Coorg', 'Active', 'Supplies freshly roasted single-origin beans weekly'],
-      ['SUP-104', 'Gourmet Pantry Supplies', 'Farhan Merchant', 'sales@gourmetpantry.in', '+91 98450 11223', 'Food & Beverage', 'APMC Market Yard, Pune', 'Active', 'Imported cooking oils, spices and culinary ingredients'],
-      ['SUP-105', 'TechSmart RFID Systems', 'Ananya Roy', 'support@techsmartrfid.com', '+91 99001 22334', 'Front Office & Stationery', 'Okhla Phase III, New Delhi', 'Active', 'VingCard compatible RFID cards & readers'],
-      ['SUP-106', 'ElectroTech Solutions', 'Suresh Nair', 'info@electrotech.co.in', '+91 94455 66778', 'Maintenance & Engineering', 'Electronics Complex, Kochi', 'Active', 'LED, HVAC parts, sensors, and electrical spares'],
-      ['SUP-107', 'HygieneFirst Chemicals', 'Meera Joshi', 'hygiene@firstchem.in', '+91 91678 99001', 'Cleaning & Chemicals', 'GIDC Estate, Ankleshwar', 'Active', 'ISO certified hotel housekeeping chemicals'],
-      ['SUP-108', 'Vintage Wine Merchants', 'David Fernandez', 'cellar@vintagemerchants.com', '+91 98200 44556', 'Bar & Beverages', 'Colaba, Mumbai', 'Active', 'Licensed alcoholic and non-alcoholic beverages distributor']
-    ];
-    supSheet.getRange(2, 1, demoSuppliers.length, demoSuppliers[0].length).setValues(demoSuppliers);
-  }
-
-  // Seed Departments
-  const deptSheet = ss.getSheetByName(SHEET_NAMES.DEPARTMENTS);
-  if (deptSheet && deptSheet.getLastRow() <= 1) {
-    const demoDepts = [
-      ['DEP-01', 'Housekeeping', 'Both Properties', 'Ms. Sunita Patil', 'Daily guest room preparation, linen distribution, and laundry'],
-      ['DEP-02', 'F&B Production (Kitchen)', 'Both Properties', 'Chef Antoine Girard', 'Main restaurants, banqueting, and in-room dining culinary operations'],
-      ['DEP-03', 'F&B Service (Restaurant & Bar)', 'Both Properties', 'Mr. Amit Kapoor', 'Dining room, lounge, poolside bar service and beverage management'],
-      ['DEP-04', 'Front Office & Concierge', 'Both Properties', 'Ms. Neha Gupta', 'Reception, check-in, key handling, and guest stationery'],
-      ['DEP-05', 'Engineering & Maintenance', 'Both Properties', 'Mr. K. R. Nambiar', 'Property upkeep, HVAC, plumbing, lighting and mechanical systems'],
-      ['DEP-06', 'Spa & Wellness Center', 'Deneb Hotel', 'Ms. Clara D’Souza', 'Ayurvedic treatments, aromatherapy, and wellness retail'],
-      ['DEP-07', 'Banqueting & Events', 'Pollux Hotel', 'Mr. Rohit Mehra', 'Conference halls, wedding venues, and audio-visual stores']
-    ];
-    deptSheet.getRange(2, 1, demoDepts.length, demoDepts[0].length).setValues(demoDepts);
-  }
-
-  // Seed Locations
-  const locSheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
-  if (locSheet && locSheet.getLastRow() <= 1) {
-    const demoLocs = [
-      ['LOC-CENTRAL', 'Central Warehouse', 'CENTRAL', 'Main Central Depot', 'Primary receipt hub for bulk procurement and inter-hotel distribution'],
-      ['LOC-DENEB', 'Deneb Hotel Store', 'DENEB', 'Property Main Store', 'On-site hotel inventory store serving Deneb Hotel departments'],
-      ['LOC-POLLUX', 'Pollux Hotel Store', 'POLLUX', 'Property Main Store', 'On-site hotel inventory store serving Pollux Hotel departments']
-    ];
-    locSheet.getRange(2, 1, demoLocs.length, demoLocs[0].length).setValues(demoLocs);
-  }
-
-  // Seed Initial Sample Transactions
-  const txnSheet = ss.getSheetByName(SHEET_NAMES.TRANSACTIONS);
-  if (txnSheet && txnSheet.getLastRow() <= 1) {
     const now = new Date();
-    const demoTxns = [
-      ['TXN-INIT-001', new Date(now.getTime() - 86400000 * 3).toISOString(), 'STOCK_IN', 'ITM-1001', 'DP-HK-001', 'King Size Bed Sheet 400TC (White)', 'Housekeeping & Linens', 50, 'Pcs', 'Apex Hospitality Linens', 'Central Warehouse', 1200, 60000, 'PO-2026-901', 'Inventory Mgr', 'Initial seasonal bulk replenishment'],
-      ['TXN-INIT-002', new Date(now.getTime() - 86400000 * 2).toISOString(), 'TRANSFER', 'ITM-1001', 'DP-HK-001', 'King Size Bed Sheet 400TC (White)', 'Housekeeping & Linens', 25, 'Pcs', 'Central Warehouse', 'Deneb Hotel Store', 1200, 30000, 'TRF-0881', 'Logistics Coord', 'Weekly transfer to Deneb property linen room'],
-      ['TXN-INIT-003', new Date(now.getTime() - 86400000 * 2).toISOString(), 'TRANSFER', 'ITM-1001', 'DP-HK-001', 'King Size Bed Sheet 400TC (White)', 'Housekeeping & Linens', 20, 'Pcs', 'Central Warehouse', 'Pollux Hotel Store', 1200, 24000, 'TRF-0882', 'Logistics Coord', 'Weekly transfer to Pollux property linen room'],
-      ['TXN-INIT-004', new Date(now.getTime() - 86400000 * 1).toISOString(), 'STOCK_OUT', 'ITM-1001', 'DP-HK-001', 'King Size Bed Sheet 400TC (White)', 'Housekeeping & Linens', 5, 'Pcs', 'Deneb Hotel Store', 'Housekeeping', 1200, 6000, 'REQ-3312', 'Sunita Patil', 'Issued for Deneb 3rd floor executive suites turnover'],
-      ['TXN-INIT-005', new Date(now.getTime() - 3600000 * 5).toISOString(), 'STOCK_IN', 'ITM-1003', 'DP-AM-001', 'Organic Shampoo 30ml Eco-Bottle', 'Guest Amenities & Toiletries', 300, 'Bottles', 'Luxe Spa & Botanicals', 'Central Warehouse', 25, 7500, 'PO-2026-908', 'Inventory Mgr', 'Delivery received in good condition, batch #AM88']
+    const demoIssues = [
+      ['ISS_001', new Date(now.getTime() - 86400000 * 2).toISOString(), 'DISBURSEMENT', 'ITM_003', 'Fresh Malai Paneer Block', 15, 'Kg', 'S_001', '21 GUN SOLUTE GGN SEC 29', 'SP_003', '21 Gun Salute - Kitchen Store', 380, 5700, 'REQ-8812', 'Store Keeper', 'Approved', 'Daily dinner prep issuance'],
+      ['ISS_002', new Date(now.getTime() - 86400000 * 1).toISOString(), 'DISBURSEMENT', 'ITM_001', 'Special Assam Orthodox Tea Leaves', 10, 'Kg', 'S_000', 'Central Depot Warehouse', 'SP_002', 'PAHLE CHAI GGN Sec 27', 650, 6500, 'REQ-6812', 'Logistics Mgr', 'Shipped', 'Replenishment for Pahle Chai Sec 27'],
+      ['ISS_003', new Date(now.getTime() - 3600000 * 6).toISOString(), 'DISBURSEMENT', 'ITM_012', 'Signature Chai Cardboard Cups 150ml', 15, 'Pack', 'S_002', 'PAHLE CHAI GGN Sec 27', 'SP_002', 'PAHLE CHAI GGN Sec 27', 180, 2700, 'REQ-6815', 'Supervisor', 'Approved', 'Counter dispensers reload']
     ];
-    txnSheet.getRange(2, 1, demoTxns.length, demoTxns[0].length).setValues(demoTxns);
+
+    sheet.getRange(2, 1, demoIssues.length, demoIssues[0].length).setValues(demoIssues);
   }
 }
 
-function connectCustomSpreadsheet(urlOrId) {
-  if (!urlOrId || typeof urlOrId !== 'string') {
-    return { success: false, error: 'Please provide a valid Google Sheet URL or ID.' };
+/**
+ * 6. Users_and_Settings Workbook (Users & Settings sheets)
+ */
+function initUsersAndSettings(ss) {
+  // Sheet 1: Users
+  let usersSheet = ss.getSheetByName('Users');
+  if (!usersSheet) {
+    usersSheet = ss.getSheets()[0];
+    usersSheet.setName('Users');
+  }
+  if (usersSheet.getLastRow() === 0) {
+    usersSheet.appendRow(['User ID', 'Name', 'Role', 'Email', 'Assigned Store / Selling Point', 'Status']);
+    formatHeaderRow(usersSheet, 6);
+    usersSheet.appendRow(['USR_001', 'Alsha Khan', 'Logistics & Inventory Manager', 'alsha.khan@dnphotels.com', 'ALL', 'Active']);
+    usersSheet.appendRow(['USR_002', 'Store Incharge - GGN Sec 29', 'Store Keeper', 'store29@dnphotels.com', 'S_001', 'Active']);
+    usersSheet.appendRow(['USR_003', 'Pahle Chai Supervisor - GGN Sec 27', 'Outlet Supervisor', 'pahlechai27@dnphotels.com', 'SP_002', 'Active']);
   }
 
-  let sheetId = urlOrId.trim();
-  const match = sheetId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (match && match[1]) {
-    sheetId = match[1];
+  // Sheet 2: Settings
+  let settingsSheet = ss.getSheetByName('Settings');
+  if (!settingsSheet) {
+    settingsSheet = ss.insertSheet('Settings');
   }
+  if (settingsSheet.getLastRow() === 0) {
+    settingsSheet.appendRow(['Key', 'Value', 'Description']);
+    formatHeaderRow(settingsSheet, 3);
+    settingsSheet.appendRow(['HOTEL_NAME', '21 Gun Salute & Pahle Chai (DNP Hotels)', 'Organization Brand Name']);
+    settingsSheet.appendRow(['CURRENCY_SYMBOL', '₹', 'Display Currency Symbol']);
+    settingsSheet.appendRow(['DRIVE_FOLDER_ID', DEFAULT_DRIVE_FOLDER_ID, 'Designated Database Drive Folder']);
+  }
+}
 
-  try {
-    const ss = SpreadsheetApp.openById(sheetId);
-    initDatabase(ss);
-    PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', sheetId);
+/**
+ * Validates and provisions all 6 workbooks inside the user's Drive folder
+ */
+function initAllWorkbooks() {
+  const list = [
+    WORKBOOKS.LOCATION_MASTER,
+    WORKBOOKS.PRODUCT_MASTER,
+    WORKBOOKS.SUPPLIER_MASTER,
+    WORKBOOKS.SUPPLIER_TXNS,
+    WORKBOOKS.ISSUANCE_TXNS,
+    WORKBOOKS.USERS_SETTINGS
+  ];
 
-    return {
-      success: true,
-      id: sheetId,
-      name: ss.getName(),
-      url: ss.getUrl(),
-      message: 'Successfully linked Google Sheet: ' + ss.getName()
+  const results = {};
+  list.forEach(name => {
+    const wb = getWorkbook(name);
+    results[name] = {
+      id: wb.getId(),
+      name: wb.getName(),
+      url: wb.getUrl(),
+      sheets: wb.getSheets().map(s => s.getName())
     };
-  } catch (err) {
-    return {
-      success: false,
-      error: 'Could not access the specified Google Sheet. Please verify permissions or the ID. Details: ' + err.message
-    };
-  }
+  });
+  return results;
 }
 
-function resetOrSeedDemoData() {
-  const ss = getSpreadsheet();
-  seedSampleDataIfEmpty(ss);
-  return { success: true, message: 'Database sample items and tables refreshed.' };
-}
-
-function getDatabaseInfo() {
-  const ss = getSpreadsheet();
+/**
+ * Returns metadata of all 6 workbooks
+ */
+function getWorkbooksInfo() {
   const folder = getDriveFolder();
-  const props = PropertiesService.getScriptProperties();
-  const folderId = props.getProperty('DRIVE_FOLDER_ID') || DEFAULT_DRIVE_FOLDER_ID;
+  const folderId = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID') || DEFAULT_DRIVE_FOLDER_ID;
+
+  const names = Object.values(WORKBOOKS);
+  const workbooks = names.map(name => {
+    try {
+      const wb = getWorkbook(name);
+      return {
+        key: name,
+        id: wb.getId(),
+        name: wb.getName(),
+        url: wb.getUrl(),
+        sheets: wb.getSheets().map(s => s.getName())
+      };
+    } catch (e) {
+      return {
+        key: name,
+        id: null,
+        name: name,
+        url: '#',
+        sheets: []
+      };
+    }
+  });
 
   return {
-    id: ss.getId(),
-    name: ss.getName(),
-    url: ss.getUrl(),
-    sheetNames: ss.getSheets().map(s => s.getName()),
     folder: {
       id: folderId,
       name: folder ? folder.getName() : 'DNP Database Drive Folder',
       url: folder ? folder.getUrl() : 'https://drive.google.com/drive/folders/' + folderId
     },
-    folderSheets: getFolderSheets()
+    workbooks: workbooks
   };
 }
 
-function getSettingsInternal(ss) {
-  const sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
-  if (!sheet) return { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'DNP HOTELS' };
-  const data = sheet.getDataRange().getValues();
-  const settings = {};
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0]) {
-      settings[String(data[i][0])] = String(data[i][1]);
-    }
-  }
-  return settings;
-}
-
+/**
+ * Settings helpers
+ */
 function getSettings() {
-  const ss = getSpreadsheet();
-  return getSettingsInternal(ss);
+  try {
+    const ss = getWorkbook(WORKBOOKS.USERS_SETTINGS);
+    const sheet = ss.getSheetByName('Settings');
+    if (!sheet) return { CURRENCY_SYMBOL: '₹', HOTEL_NAME: '21 Gun Salute & Pahle Chai' };
+    const data = sheet.getDataRange().getValues();
+    const settings = {};
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0]) {
+        settings[String(data[i][0])] = String(data[i][1]);
+      }
+    }
+    return settings;
+  } catch (e) {
+    return { CURRENCY_SYMBOL: '₹', HOTEL_NAME: '21 Gun Salute & Pahle Chai' };
+  }
 }
 
 function saveSettings(settingsObj) {
-  const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
-  if (!sheet) throw new Error('Settings sheet missing');
+  const ss = getWorkbook(WORKBOOKS.USERS_SETTINGS);
+  const sheet = ss.getSheetByName('Settings');
+  if (!sheet) throw new Error('Settings sheet missing in Users_and_Settings');
 
   const data = sheet.getDataRange().getValues();
   for (const key in settingsObj) {
@@ -477,8 +466,39 @@ function saveSettings(settingsObj) {
       }
     }
     if (!found) {
-      sheet.appendRow([key, String(settingsObj[key]), 'User customized setting']);
+      sheet.appendRow([key, String(settingsObj[key]), 'Custom setting']);
     }
   }
   return { success: true };
+}
+
+function setDriveFolderId(folderUrlOrId) {
+  if (!folderUrlOrId || typeof folderUrlOrId !== 'string') {
+    return { success: false, error: 'Please provide a valid Google Drive folder URL or ID.' };
+  }
+  let folderId = folderUrlOrId.trim();
+  const match = folderId.match(/\/folders\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) {
+    folderId = match[1];
+  }
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    PropertiesService.getScriptProperties().setProperty('DRIVE_FOLDER_ID', folderId);
+    // Clear cached workbook IDs to rebind to new folder
+    const props = PropertiesService.getScriptProperties();
+    Object.values(WORKBOOKS).forEach(wb => props.deleteProperty('WB_ID_' + wb));
+
+    return {
+      success: true,
+      id: folderId,
+      name: folder.getName(),
+      url: folder.getUrl(),
+      message: 'Connected to Drive folder: ' + folder.getName()
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: 'Could not access the specified Google Drive folder. Details: ' + err.message
+    };
+  }
 }

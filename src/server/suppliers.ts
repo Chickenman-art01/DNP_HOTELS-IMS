@@ -1,10 +1,15 @@
 /**
- * DNP HOTELS - Suppliers, Departments & Locations Management
+ * DNP HOTELS - Supplier Master & Location Master Handlers
  */
 
-function getSuppliersInternal(ss) {
-  const sheet = ss.getSheetByName(SHEET_NAMES.SUPPLIERS);
+// ==========================================
+// 1. SUPPLIERS (Supplier_Master Workbook)
+// ==========================================
+function getSuppliers() {
+  const ss = getWorkbook(WORKBOOKS.SUPPLIER_MASTER);
+  const sheet = ss.getSheetByName('Supplier_Master');
   if (!sheet) return [];
+
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
@@ -14,37 +19,31 @@ function getSuppliersInternal(ss) {
     if (!row[0] && !row[1]) continue;
 
     suppliers.push({
-      id: String(row[0]),
+      id: String(row[0]), // e.g. SUP_001
+      code: String(row[0]),
       name: String(row[1]),
-      contactPerson: String(row[2] || ''),
-      email: String(row[3] || ''),
+      category: String(row[2] || 'General'),
+      contactPerson: String(row[3] || ''),
       phone: String(row[4] || ''),
-      categorySupplied: String(row[5] || ''),
-      address: String(row[6] || ''),
-      status: String(row[7] || 'Active'),
-      notes: String(row[8] || '')
+      email: String(row[5] || ''),
+      status: String(row[6] || 'Active')
     });
   }
   return suppliers;
 }
 
-function getSuppliers() {
-  const ss = getSpreadsheet();
-  return getSuppliersInternal(ss);
-}
-
 function saveSupplier(supData) {
-  const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.SUPPLIERS);
-  if (!sheet) throw new Error('Suppliers sheet missing');
+  const ss = getWorkbook(WORKBOOKS.SUPPLIER_MASTER);
+  const sheet = ss.getSheetByName('Supplier_Master');
+  if (!sheet) throw new Error('Supplier_Master sheet not found');
 
   const data = sheet.getDataRange().getValues();
-  let supId = supData.id ? String(supData.id).trim() : '';
+  let supCode = supData.code || supData.id ? String(supData.code || supData.id).trim() : '';
   let targetRow = -1;
 
-  if (supId) {
+  if (supCode) {
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === supId) {
+      if (String(data[i][0]).toUpperCase() === supCode.toUpperCase()) {
         targetRow = i + 1;
         break;
       }
@@ -52,45 +51,41 @@ function saveSupplier(supData) {
   }
 
   if (targetRow > 1) {
-    sheet.getRange(targetRow, 1, 1, 9).setValues([[
-      supId,
+    sheet.getRange(targetRow, 1, 1, 7).setValues([[
+      supCode,
       supData.name,
+      supData.category || 'General',
       supData.contactPerson || '',
-      supData.email || '',
       supData.phone || '',
-      supData.categorySupplied || '',
-      supData.address || '',
-      supData.status || 'Active',
-      supData.notes || ''
+      supData.email || '',
+      supData.status || 'Active'
     ]]);
   } else {
-    if (!supId) {
-      supId = 'SUP-' + (100 + data.length);
+    if (!supCode) {
+      supCode = 'SUP_' + String(data.length).padStart(3, '0');
     }
     sheet.appendRow([
-      supId,
+      supCode,
       supData.name,
+      supData.category || 'General',
       supData.contactPerson || '',
-      supData.email || '',
       supData.phone || '',
-      supData.categorySupplied || '',
-      supData.address || '',
-      supData.status || 'Active',
-      supData.notes || ''
+      supData.email || '',
+      supData.status || 'Active'
     ]);
   }
 
-  return { success: true, supplierId: supId };
+  return { success: true, supplierCode: supCode };
 }
 
-function deleteSupplier(supId) {
-  const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.SUPPLIERS);
-  if (!sheet) throw new Error('Suppliers sheet missing');
+function deleteSupplier(supCode) {
+  const ss = getWorkbook(WORKBOOKS.SUPPLIER_MASTER);
+  const sheet = ss.getSheetByName('Supplier_Master');
+  if (!sheet) throw new Error('Supplier_Master sheet not found');
 
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(supId)) {
+    if (String(data[i][0]) === String(supCode)) {
       sheet.deleteRow(i + 1);
       return { success: true };
     }
@@ -98,54 +93,160 @@ function deleteSupplier(supId) {
   return { success: false, error: 'Supplier not found' };
 }
 
-function getDepartmentsInternal(ss) {
-  const sheet = ss.getSheetByName(SHEET_NAMES.DEPARTMENTS);
+// ==========================================
+// 2. LOCATIONS: STORES & SELLING POINTS (Location_Master Workbook)
+// ==========================================
+function getStores() {
+  const ss = getWorkbook(WORKBOOKS.LOCATION_MASTER);
+  const sheet = ss.getSheetByName('Store');
   if (!sheet) return [];
+
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
-  const depts = [];
+  const stores = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (!row[0] && !row[1]) continue;
-    depts.push({
-      id: String(row[0]),
+    stores.push({
+      code: String(row[0]),
       name: String(row[1]),
-      propertyScope: String(row[2] || 'Both Properties'),
-      headOfDepartment: String(row[3] || ''),
-      notes: String(row[4] || '')
-    });
-  }
-  return depts;
-}
-
-function getDepartments() {
-  const ss = getSpreadsheet();
-  return getDepartmentsInternal(ss);
-}
-
-function getLocationsInternal(ss) {
-  const sheet = ss.getSheetByName(SHEET_NAMES.LOCATIONS);
-  if (!sheet) return [];
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-
-  const locs = [];
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    if (!row[0] && !row[1]) continue;
-    locs.push({
-      id: String(row[0]),
-      name: String(row[1]),
-      code: String(row[2]),
-      type: String(row[3]),
+      type: String(row[2] || 'Store'),
+      status: String(row[3] || 'Active'),
       description: String(row[4] || '')
     });
   }
-  return locs;
+  return stores;
 }
 
-function getLocations() {
-  const ss = getSpreadsheet();
-  return getLocationsInternal(ss);
+function saveStore(storeData) {
+  const ss = getWorkbook(WORKBOOKS.LOCATION_MASTER);
+  const sheet = ss.getSheetByName('Store');
+  if (!sheet) throw new Error('Store sheet missing in Location_Master');
+
+  const data = sheet.getDataRange().getValues();
+  let code = storeData.code ? String(storeData.code).trim() : '';
+  let targetRow = -1;
+
+  if (code) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).toUpperCase() === code.toUpperCase()) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (targetRow > 1) {
+    sheet.getRange(targetRow, 1, 1, 5).setValues([[
+      code,
+      storeData.name,
+      storeData.type || 'Store',
+      storeData.status || 'Active',
+      storeData.description || ''
+    ]]);
+  } else {
+    if (!code) {
+      code = 'S_' + String(data.length).padStart(3, '0');
+    }
+    sheet.appendRow([
+      code,
+      storeData.name,
+      storeData.type || 'Store',
+      storeData.status || 'Active',
+      storeData.description || ''
+    ]);
+  }
+  return { success: true, code: code };
+}
+
+function getSellingPoints() {
+  const ss = getWorkbook(WORKBOOKS.LOCATION_MASTER);
+  const sheet = ss.getSheetByName('Selling_Point');
+  if (!sheet) return [];
+
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+
+  const sps = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0] && !row[1]) continue;
+    sps.push({
+      code: String(row[0]),
+      name: String(row[1]),
+      storeCode: String(row[2] || 'S_001'),
+      type: String(row[3] || 'Counter'),
+      status: String(row[4] || 'Active')
+    });
+  }
+  return sps;
+}
+
+function saveSellingPoint(spData) {
+  const ss = getWorkbook(WORKBOOKS.LOCATION_MASTER);
+  const sheet = ss.getSheetByName('Selling_Point');
+  if (!sheet) throw new Error('Selling_Point sheet missing in Location_Master');
+
+  const data = sheet.getDataRange().getValues();
+  let code = spData.code ? String(spData.code).trim() : '';
+  let targetRow = -1;
+
+  if (code) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).toUpperCase() === code.toUpperCase()) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (targetRow > 1) {
+    sheet.getRange(targetRow, 1, 1, 5).setValues([[
+      code,
+      spData.name,
+      spData.storeCode || 'S_001',
+      spData.type || 'Counter',
+      spData.status || 'Active'
+    ]]);
+  } else {
+    if (!code) {
+      code = 'SP_' + String(data.length).padStart(3, '0');
+    }
+    sheet.appendRow([
+      code,
+      spData.name,
+      spData.storeCode || 'S_001',
+      spData.type || 'Counter',
+      spData.status || 'Active'
+    ]);
+  }
+  return { success: true, code: code };
+}
+
+// ==========================================
+// 3. USERS (Users_and_Settings Workbook)
+// ==========================================
+function getUsers() {
+  const ss = getWorkbook(WORKBOOKS.USERS_SETTINGS);
+  const sheet = ss.getSheetByName('Users');
+  if (!sheet) return [];
+
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+
+  const users = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0] && !row[1]) continue;
+    users.push({
+      id: String(row[0]),
+      name: String(row[1]),
+      role: String(row[2] || 'Staff'),
+      email: String(row[3] || ''),
+      assignedStore: String(row[4] || 'ALL'),
+      status: String(row[5] || 'Active')
+    });
+  }
+  return users;
 }

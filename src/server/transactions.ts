@@ -1,209 +1,343 @@
 /**
- * DNP HOTELS - Atomic Stock Movements & Transactions
+ * DNP HOTELS - Supplier & Issuance Transactions Engine
  */
 
-function processStockTransaction(txn) {
+// ==========================================
+// 1. SUPPLIER PURCHASES & STOCK IN
+// ==========================================
+function processSupplierPurchase(txn) {
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
   } catch (e) {
-    throw new Error('Server busy with concurrent transaction. Please retry in a moment.');
+    throw new Error('Server busy with concurrent transaction. Please retry.');
   }
 
   try {
-    const ss = getSpreadsheet();
-    const itemsSheet = ss.getSheetByName(SHEET_NAMES.ITEMS);
-    const txnSheet = ss.getSheetByName(SHEET_NAMES.TRANSACTIONS);
+    const prodWb = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
+    const prodSheet = prodWb.getSheetByName('Product_Master');
+    const supTxnWb = getWorkbook(WORKBOOKS.SUPPLIER_TXNS);
+    const supTxnSheet = supTxnWb.getSheetByName('Supplier_Transactions');
 
-    if (!itemsSheet || !txnSheet) throw new Error('Required sheets missing in database.');
-
-    const itemsData = itemsSheet.getDataRange().getValues();
+    const itemCode = String(txn.itemCode || txn.itemId || txn.sku).trim().toUpperCase();
+    const prodData = prodSheet.getDataRange().getValues();
     let targetRow = -1;
-    let itemRowData = null;
+    let itemRow = null;
 
-    for (let i = 1; i < itemsData.length; i++) {
-      if (String(itemsData[i][0]) === String(txn.itemId) || String(itemsData[i][1]) === String(txn.sku)) {
+    for (let i = 1; i < prodData.length; i++) {
+      if (String(prodData[i][0]).toUpperCase() === itemCode) {
         targetRow = i + 1;
-        itemRowData = itemsData[i];
+        itemRow = prodData[i];
         break;
       }
     }
 
-    if (targetRow === -1 || !itemRowData) {
-      throw new Error('Item not found for ID / SKU: ' + (txn.itemId || txn.sku));
+    if (targetRow === -1 || !itemRow) {
+      throw new Error('Product not found for Item Code: ' + itemCode);
     }
 
-    const itemId = String(itemRowData[0]);
-    const sku = String(itemRowData[1]);
-    const itemName = String(itemRowData[2]);
-    const category = String(itemRowData[3]);
-    const unit = String(itemRowData[4]);
-    let minStock = Number(itemRowData[5]) || 0;
-    let centralStock = Number(itemRowData[6]) || 0;
-    let denebStock = Number(itemRowData[7]) || 0;
-    let polluxStock = Number(itemRowData[8]) || 0;
-    let unitCost = Number(txn.unitPrice) || Number(itemRowData[10]) || 0;
+    const itemDesc = String(itemRow[1]);
+    const category = String(itemRow[2]);
+    const uom = String(itemRow[4] || 'Pcs');
+    let rate = Number(txn.rate) || Number(itemRow[5]) || 0;
+    let taxPct = Number(txn.taxPercent) || Number(itemRow[6]) || 0;
+    const minStock = Number(itemRow[7]) || 0;
+    let stockS001 = Number(itemRow[8]) || 0;
+    let stockS002 = Number(itemRow[9]) || 0;
+    let centralStock = Number(itemRow[10]) || 0;
 
     const qty = Math.abs(Number(txn.quantity));
-    if (isNaN(qty) || qty <= 0) {
-      throw new Error('Invalid quantity specified. Must be greater than 0.');
-    }
+    if (isNaN(qty) || qty <= 0) throw new Error('Quantity must be greater than 0');
 
-    const type = String(txn.type).toUpperCase();
-    const source = String(txn.sourceLocation || '').trim();
-    const dest = String(txn.destLocation || '').trim();
+    const storeCode = String(txn.storeCode || txn.destLocation || 'S_001').toUpperCase();
+    let storeName = txn.storeName || 'Store';
 
-    function getStockByLoc(locName) {
-      const l = locName.toUpperCase();
-      if (l.includes('CENTRAL')) return centralStock;
-      if (l.includes('DENEB')) return denebStock;
-      if (l.includes('POLLUX')) return polluxStock;
-      return null;
-    }
-
-    function updateStockByLoc(locName, delta) {
-      const l = locName.toUpperCase();
-      if (l.includes('CENTRAL')) centralStock += delta;
-      else if (l.includes('DENEB')) denebStock += delta;
-      else if (l.includes('POLLUX')) polluxStock += delta;
-      else {
-        throw new Error('Unrecognized property location: ' + locName + '. Must be Central Warehouse, Deneb Hotel, or Pollux Hotel.');
-      }
-    }
-
-    if (type === 'STOCK_IN') {
-      updateStockByLoc(dest, qty);
-      if (txn.unitPrice && Number(txn.unitPrice) > 0) {
-        unitCost = Number(txn.unitPrice);
-      }
-    } else if (type === 'STOCK_OUT') {
-      const currentLocStock = getStockByLoc(source);
-      if (currentLocStock === null) {
-        throw new Error('Invalid source location for Stock Out: ' + source);
-      }
-      if (currentLocStock < qty) {
-        throw new Error('Insufficient stock in ' + source + '. Available: ' + currentLocStock + ', Requested: ' + qty);
-      }
-      updateStockByLoc(source, -qty);
-    } else if (type === 'TRANSFER') {
-      const currentLocStock = getStockByLoc(source);
-      if (currentLocStock === null) {
-        throw new Error('Invalid source location for Transfer: ' + source);
-      }
-      if (currentLocStock < qty) {
-        throw new Error('Insufficient stock in ' + source + ' to transfer. Available: ' + currentLocStock + ', Transfer: ' + qty);
-      }
-      updateStockByLoc(source, -qty);
-      updateStockByLoc(dest, qty);
-    } else if (type === 'ADJUSTMENT') {
-      const targetLoc = source || dest;
-      const currentLocStock = getStockByLoc(targetLoc);
-      if (currentLocStock === null) {
-        throw new Error('Invalid location for Stock Adjustment: ' + targetLoc);
-      }
-      const countedStock = Number(txn.countedQuantity);
-      if (isNaN(countedStock) || countedStock < 0) {
-        throw new Error('Counted physical stock must be a non-negative number.');
-      }
-      const diff = countedStock - currentLocStock;
-      updateStockByLoc(targetLoc, diff);
+    if (storeCode.includes('S_001') || storeCode.includes('21 GUN') || storeCode.includes('DENEB')) {
+      stockS001 += qty;
+      storeName = '21 GUN SOLUTE GGN SEC 29';
+    } else if (storeCode.includes('S_002') || storeCode.includes('PAHLE') || storeCode.includes('POLLUX')) {
+      stockS002 += qty;
+      storeName = 'PAHLE CHAI GGN Sec 27';
     } else {
-      throw new Error('Invalid transaction type: ' + type);
+      centralStock += qty;
+      storeName = 'Central Depot Warehouse';
     }
 
-    const totalStock = centralStock + denebStock + polluxStock;
-    const totalValue = totalStock * unitCost;
+    const totalStock = stockS001 + stockS002 + centralStock;
+    const totalVal = totalStock * rate;
     const nowIso = new Date().toISOString();
 
-    itemsSheet.getRange(targetRow, 7, 1, 6).setValues([[
+    // Update Product_Master row
+    prodSheet.getRange(targetRow, 6, 1, 8).setValues([[
+      rate,
+      taxPct,
+      minStock,
+      stockS001,
+      stockS002,
       centralStock,
-      denebStock,
-      polluxStock,
       totalStock,
-      unitCost,
-      totalValue
+      totalVal
     ]]);
-    itemsSheet.getRange(targetRow, 16).setValue(nowIso);
+    prodSheet.getRange(targetRow, 16).setValue(nowIso);
 
+    // Append to Supplier_Transactions
     const dateCode = Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyyMMdd');
-    const txnId = 'TXN-' + dateCode + '-' + Math.floor(1000 + Math.random() * 9000);
-    const lineTotalCost = qty * unitCost;
+    const txnId = 'TXN_SUP_' + dateCode + '_' + Math.floor(1000 + Math.random() * 9000);
+    const taxAmt = (qty * rate * taxPct) / 100;
+    const totalAmt = (qty * rate) + taxAmt;
 
-    txnSheet.appendRow([
+    supTxnSheet.appendRow([
       txnId,
       nowIso,
-      type,
-      itemId,
-      sku,
-      itemName,
+      txn.supplierCode || '',
+      txn.supplierName || '',
+      itemCode,
+      itemDesc,
       category,
       qty,
-      unit,
-      source,
-      dest,
-      unitCost,
-      lineTotalCost,
-      txn.reference || '',
-      txn.performedBy || 'Staff',
+      uom,
+      rate,
+      taxPct,
+      totalAmt,
+      storeCode,
+      storeName,
+      txn.reference || txn.invoiceRef || '',
+      txn.performedBy || txn.receivedBy || 'Store Keeper',
       txn.notes || ''
     ]);
 
     return {
       success: true,
       transactionId: txnId,
-      updatedItem: {
-        id: itemId,
-        sku: sku,
-        name: itemName,
-        centralStock: centralStock,
-        denebStock: denebStock,
-        polluxStock: polluxStock,
-        totalStock: totalStock,
-        unitCost: unitCost,
-        totalValue: totalValue,
-        lastUpdated: nowIso
-      }
+      itemCode: itemCode,
+      updatedTotalStock: totalStock,
+      updatedValuation: totalVal
     };
   } finally {
     lock.releaseLock();
   }
 }
 
-function getTransactionsInternal(ss, limit) {
-  const sheet = ss.getSheetByName(SHEET_NAMES.TRANSACTIONS);
-  if (!sheet) return [];
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-
-  const txns = [];
-  const max = limit || 100;
-  for (let i = data.length - 1; i >= 1 && txns.length < max; i--) {
-    const row = data[i];
-    if (!row[0]) continue;
-
-    txns.push({
-      id: String(row[0]),
-      timestamp: row[1] ? new Date(row[1]).toISOString() : '',
-      type: String(row[2]),
-      itemId: String(row[3]),
-      sku: String(row[4]),
-      itemName: String(row[5]),
-      category: String(row[6]),
-      quantity: Number(row[7]) || 0,
-      unit: String(row[8]),
-      sourceLocation: String(row[9]),
-      destLocation: String(row[10]),
-      unitPrice: Number(row[11]) || 0,
-      totalCost: Number(row[12]) || 0,
-      reference: String(row[13] || ''),
-      performedBy: String(row[14] || ''),
-      notes: String(row[15] || '')
-    });
+// ==========================================
+// 2. ISSUANCE TO SELLING POINTS & DEPARTMENTS
+// ==========================================
+function processStockIssuance(txn) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (e) {
+    throw new Error('Server busy with concurrent transaction. Please retry.');
   }
-  return txns;
+
+  try {
+    const prodWb = getWorkbook(WORKBOOKS.PRODUCT_MASTER);
+    const prodSheet = prodWb.getSheetByName('Product_Master');
+    const issueWb = getWorkbook(WORKBOOKS.ISSUANCE_TXNS);
+    const issueSheet = issueWb.getSheetByName('Issuance_Transactions');
+
+    const itemCode = String(txn.itemCode || txn.itemId || txn.sku).trim().toUpperCase();
+    const prodData = prodSheet.getDataRange().getValues();
+    let targetRow = -1;
+    let itemRow = null;
+
+    for (let i = 1; i < prodData.length; i++) {
+      if (String(prodData[i][0]).toUpperCase() === itemCode) {
+        targetRow = i + 1;
+        itemRow = prodData[i];
+        break;
+      }
+    }
+
+    if (targetRow === -1 || !itemRow) {
+      throw new Error('Product not found for Item Code: ' + itemCode);
+    }
+
+    const itemDesc = String(itemRow[1]);
+    const uom = String(itemRow[4] || 'Pcs');
+    const rate = Number(itemRow[5]) || 0;
+    let stockS001 = Number(itemRow[8]) || 0;
+    let stockS002 = Number(itemRow[9]) || 0;
+    let centralStock = Number(itemRow[10]) || 0;
+
+    const qty = Math.abs(Number(txn.quantity));
+    if (isNaN(qty) || qty <= 0) throw new Error('Quantity must be greater than 0');
+
+    const fromStore = String(txn.sourceLocation || txn.fromStore || 'S_001').toUpperCase();
+    const toSp = String(txn.destLocation || txn.toSellingPoint || 'SP_001');
+
+    // Validate available stock in source store
+    if (fromStore.includes('S_001') || fromStore.includes('21 GUN')) {
+      if (stockS001 < qty) throw new Error(`Insufficient stock in 21 GUN SOLUTE GGN SEC 29 (Available: ${stockS001}, Requested: ${qty})`);
+      stockS001 -= qty;
+    } else if (fromStore.includes('S_002') || fromStore.includes('PAHLE')) {
+      if (stockS002 < qty) throw new Error(`Insufficient stock in PAHLE CHAI GGN Sec 27 (Available: ${stockS002}, Requested: ${qty})`);
+      stockS002 -= qty;
+    } else {
+      if (centralStock < qty) throw new Error(`Insufficient stock in Central Depot (Available: ${centralStock}, Requested: ${qty})`);
+      centralStock -= qty;
+    }
+
+    // If it's a transfer between stores, increase stock in destination
+    const type = String(txn.type || 'DISBURSEMENT').toUpperCase();
+    if (type === 'TRANSFER') {
+      const dest = toSp.toUpperCase();
+      if (dest.includes('S_001') || dest.includes('21 GUN')) {
+        stockS001 += qty;
+      } else if (dest.includes('S_002') || dest.includes('PAHLE')) {
+        stockS002 += qty;
+      } else {
+        centralStock += qty;
+      }
+    }
+
+    const totalStock = stockS001 + stockS002 + centralStock;
+    const totalVal = totalStock * rate;
+    const nowIso = new Date().toISOString();
+
+    // Update Product_Master
+    prodSheet.getRange(targetRow, 9, 1, 5).setValues([[
+      stockS001,
+      stockS002,
+      centralStock,
+      totalStock,
+      totalVal
+    ]]);
+    prodSheet.getRange(targetRow, 16).setValue(nowIso);
+
+    // Append to Issuance_Transactions
+    const dateCode = Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyyMMdd');
+    const issueId = 'ISS_' + dateCode + '_' + Math.floor(1000 + Math.random() * 9000);
+    const lineTotal = qty * rate;
+
+    issueSheet.appendRow([
+      issueId,
+      nowIso,
+      type,
+      itemCode,
+      itemDesc,
+      qty,
+      uom,
+      fromStore,
+      txn.fromStoreName || fromStore,
+      toSp,
+      txn.toSellingPointName || toSp,
+      rate,
+      lineTotal,
+      txn.reference || txn.requisitionRef || '',
+      txn.performedBy || txn.issuedBy || 'Store Incharge',
+      'Approved',
+      txn.notes || ''
+    ]);
+
+    return {
+      success: true,
+      issuanceId: issueId,
+      itemCode: itemCode,
+      updatedTotalStock: totalStock,
+      updatedValuation: totalVal
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Universal dispatcher for frontend modal calls
+ */
+function processStockTransaction(txn) {
+  const type = String(txn.type).toUpperCase();
+  if (type === 'STOCK_IN') {
+    return processSupplierPurchase(txn);
+  } else {
+    return processStockIssuance(txn);
+  }
+}
+
+// ==========================================
+// 3. READ TRANSACTIONS
+// ==========================================
+function getSupplierTransactions(limit) {
+  try {
+    const ss = getWorkbook(WORKBOOKS.SUPPLIER_TXNS);
+    const sheet = ss.getSheetByName('Supplier_Transactions');
+    if (!sheet) return [];
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+
+    const list = [];
+    const max = limit || 100;
+    for (let i = data.length - 1; i >= 1 && list.length < max; i--) {
+      const r = data[i];
+      if (!r[0]) continue;
+      list.push({
+        id: String(r[0]),
+        timestamp: r[1] ? new Date(r[1]).toISOString() : '',
+        supplierCode: String(r[2]),
+        supplierName: String(r[3]),
+        itemCode: String(r[4]),
+        itemName: String(r[5]),
+        category: String(r[6]),
+        quantity: Number(r[7]) || 0,
+        unit: String(r[8]),
+        rate: Number(r[9]) || 0,
+        taxPercent: Number(r[10]) || 0,
+        totalAmount: Number(r[11]) || 0,
+        storeCode: String(r[12]),
+        storeName: String(r[13]),
+        reference: String(r[14] || ''),
+        performedBy: String(r[15] || ''),
+        notes: String(r[16] || '')
+      });
+    }
+    return list;
+  } catch (e) {
+    return [];
+  }
+}
+
+function getIssuanceTransactions(limit) {
+  try {
+    const ss = getWorkbook(WORKBOOKS.ISSUANCE_TXNS);
+    const sheet = ss.getSheetByName('Issuance_Transactions');
+    if (!sheet) return [];
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+
+    const list = [];
+    const max = limit || 100;
+    for (let i = data.length - 1; i >= 1 && list.length < max; i--) {
+      const r = data[i];
+      if (!r[0]) continue;
+      list.push({
+        id: String(r[0]),
+        timestamp: r[1] ? new Date(r[1]).toISOString() : '',
+        type: String(r[2]),
+        itemCode: String(r[3]),
+        itemName: String(r[4]),
+        sku: String(r[3]),
+        quantity: Number(r[5]) || 0,
+        unit: String(r[6]),
+        fromStoreCode: String(r[7]),
+        sourceLocation: String(r[8] || r[7]),
+        toSellingPointCode: String(r[9]),
+        destLocation: String(r[10] || r[9]),
+        rate: Number(r[11]) || 0,
+        unitPrice: Number(r[11]) || 0,
+        totalCost: Number(r[12]) || 0,
+        reference: String(r[13] || ''),
+        performedBy: String(r[14] || ''),
+        status: String(r[15] || 'Approved'),
+        notes: String(r[16] || '')
+      });
+    }
+    return list;
+  } catch (e) {
+    return [];
+  }
 }
 
 function getTransactions(limit) {
-  const ss = getSpreadsheet();
-  return getTransactionsInternal(ss, limit || 100);
+  return getIssuanceTransactions(limit || 100);
 }
