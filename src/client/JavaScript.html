@@ -139,13 +139,34 @@ const app = {
     const sheetUrl = this.state.dbInfo.url || '#';
     const sheetId = this.state.dbInfo.id || '--';
     const sheetName = this.state.dbInfo.name || 'DNP HOTELS Database';
+    const folder = this.state.dbInfo.folder || {
+      id: '1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx',
+      name: 'DNP Database Drive Folder',
+      url: 'https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx'
+    };
 
-    const headerLink = document.getElementById('openSheetBtn');
-    if (headerLink) {
-      headerLink.href = sheetUrl;
-      if (!this.state.dbInfo.url) headerLink.classList.add('hidden');
-      else headerLink.classList.remove('hidden');
+    const headerSheetLink = document.getElementById('openSheetBtn');
+    if (headerSheetLink) {
+      headerSheetLink.href = sheetUrl;
+      if (!this.state.dbInfo.url) headerSheetLink.classList.add('hidden');
+      else headerSheetLink.classList.remove('hidden');
     }
+
+    const headerDriveLink = document.getElementById('openDriveFolderBtn');
+    if (headerDriveLink && folder.url) {
+      headerDriveLink.href = folder.url;
+    }
+
+    const driveDirectLink = document.getElementById('openDriveFolderDirectLink');
+    if (driveDirectLink && folder.url) {
+      driveDirectLink.href = folder.url;
+    }
+
+    const folderNameEl = document.getElementById('driveFolderName');
+    if (folderNameEl) folderNameEl.innerText = folder.name;
+
+    const folderIdEl = document.getElementById('driveFolderId');
+    if (folderIdEl) folderIdEl.innerText = folder.id;
 
     const settingsLink = document.getElementById('settingsDirectSheetLink');
     if (settingsLink) settingsLink.href = sheetUrl;
@@ -155,6 +176,51 @@ const app = {
 
     const idEl = document.getElementById('settingsDbId');
     if (idEl) idEl.innerText = sheetId;
+
+    this.renderDriveFolderSheets();
+  },
+
+  renderDriveFolderSheets: function() {
+    const container = document.getElementById('driveFolderSheetsList');
+    if (!container) return;
+
+    const sheets = this.state.dbInfo.folderSheets || [];
+    const activeId = this.state.dbInfo.id;
+
+    if (sheets.length === 0) {
+      container.innerHTML = `
+        <div class="p-3 bg-slate-50 rounded-lg border border-dashed border-slate-300 text-[11px] text-slate-500 text-center">
+          <i class="fa-solid fa-file-circle-plus text-slate-400 mr-1.5"></i>
+          No spreadsheets detected inside this Drive folder yet. New database sheets and exports will be stored here.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = sheets.map(s => {
+      const isActive = s.id === activeId;
+      const timeStr = s.lastUpdated ? new Date(s.lastUpdated).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      return `
+        <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border ${isActive ? 'border-emerald-300 bg-emerald-50/40' : 'border-slate-200'}">
+          <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-file-excel text-emerald-600 text-base"></i>
+            <div>
+              <div class="font-bold text-slate-800 text-xs">${s.name}</div>
+              <div class="text-[10px] text-slate-400 font-mono">ID: ${s.id} ${timeStr ? '• Updated ' + timeStr : ''}</div>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <a href="${s.url}" target="_blank" class="text-[11px] text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-200 transition">
+              Open <i class="fa-solid fa-arrow-up-right-from-square text-[9px] ml-0.5"></i>
+            </a>
+            ${isActive 
+              ? `<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-300"><i class="fa-solid fa-check mr-1"></i>Active</span>`
+              : `<button onclick="app.activateSheetFromFolder('${s.id}')" class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] px-2.5 py-1 rounded transition">Set as Active</button>`
+            }
+          </div>
+        </div>
+      `;
+    }).join('');
   },
 
   // Number & Currency Formatters
@@ -756,6 +822,93 @@ const app = {
     } else {
       this.hideLoading();
       this.showToast('Demo data re-seeded (local mode)');
+    }
+  },
+
+  refreshDriveFolderSheets: function() {
+    const icon = document.getElementById('scanFolderIcon');
+    if (icon) icon.classList.add('fa-spin');
+    this.showToast('Scanning Drive folder for spreadsheets...', 'info');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(info) {
+          if (icon) icon.classList.remove('fa-spin');
+          if (info && info.folderSheets) {
+            app.state.dbInfo.folderSheets = info.folderSheets;
+            app.renderDriveFolderSheets();
+            app.showToast(`Found ${info.folderSheets.length} spreadsheets in folder`);
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (icon) icon.classList.remove('fa-spin');
+          app.showToast('Error scanning Drive folder: ' + err.message, 'error');
+        })
+        .getDatabaseInfo();
+    } else {
+      setTimeout(() => {
+        if (icon) icon.classList.remove('fa-spin');
+        this.showToast('Drive folder scan completed (test mode)');
+      }, 500);
+    }
+  },
+
+  connectCustomDriveFolder: function() {
+    const input = document.getElementById('customDriveFolderInput');
+    const val = (input ? input.value : '').trim();
+    if (!val) {
+      this.showToast('Please enter a valid Google Drive folder URL or ID.', 'error');
+      return;
+    }
+
+    this.showLoading('Connecting Drive Folder...', 'Validating folder access');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          if (res.success) {
+            app.showToast(res.message);
+            input.value = '';
+            app.loadInitialData(true);
+          } else {
+            app.showToast(res.error || 'Failed to connect folder', 'error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Folder error: ' + err.message, 'error');
+        })
+        .setDriveFolderId(val);
+    } else {
+      this.hideLoading();
+      this.showToast('Drive folder connected (test mode)');
+    }
+  },
+
+  activateSheetFromFolder: function(sheetId) {
+    if (!confirm('Switch the active IMS Database to this spreadsheet?')) return;
+    this.showLoading('Switching Database...', 'Connecting selected spreadsheet');
+
+    if (this.isGasEnv()) {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          app.hideLoading();
+          if (res.success) {
+            app.showToast(res.message);
+            app.loadInitialData(true);
+          } else {
+            app.showToast(res.error || 'Failed to switch sheet', 'error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          app.hideLoading();
+          app.showToast('Error switching database: ' + err.message, 'error');
+        })
+        .connectCustomSpreadsheet(sheetId);
+    } else {
+      this.hideLoading();
+      this.showToast('Switched database sheet (test mode)');
     }
   },
 

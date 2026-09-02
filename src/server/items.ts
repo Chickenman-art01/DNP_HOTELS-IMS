@@ -279,10 +279,20 @@ function calculateDashboardMetrics(items, transactions) {
 
 function getInitialData() {
   const ss = getSpreadsheet();
+  const folder = getDriveFolder();
+  const props = PropertiesService.getScriptProperties();
+  const folderId = props.getProperty('DRIVE_FOLDER_ID') || DEFAULT_DRIVE_FOLDER_ID;
+
   const dbInfo = {
     id: ss.getId(),
     name: ss.getName(),
-    url: ss.getUrl()
+    url: ss.getUrl(),
+    folder: {
+      id: folderId,
+      name: folder ? folder.getName() : 'DNP Database Drive Folder',
+      url: folder ? folder.getUrl() : 'https://drive.google.com/drive/folders/' + folderId
+    },
+    folderSheets: getFolderSheets()
   };
 
   const items = getItemsInternal(ss);

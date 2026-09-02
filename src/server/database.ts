@@ -11,9 +11,79 @@ const SHEET_NAMES = {
   SETTINGS: 'Settings'
 };
 
+const DEFAULT_DRIVE_FOLDER_ID = '1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx';
+
+/**
+ * Gets the connected Google Drive folder for database storage
+ */
+function getDriveFolder() {
+  const props = PropertiesService.getScriptProperties();
+  const folderId = props.getProperty('DRIVE_FOLDER_ID') || DEFAULT_DRIVE_FOLDER_ID;
+  try {
+    return DriveApp.getFolderById(folderId);
+  } catch (err) {
+    console.warn('Could not access Google Drive folder by ID: ' + folderId, err);
+    return null;
+  }
+}
+
+/**
+ * Scans the Google Drive folder for all spreadsheets
+ */
+function getFolderSheets() {
+  const folder = getDriveFolder();
+  if (!folder) return [];
+  const sheets = [];
+  try {
+    const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
+    while (files.hasNext()) {
+      const f = files.next();
+      sheets.push({
+        id: f.getId(),
+        name: f.getName(),
+        url: f.getUrl(),
+        lastUpdated: f.getLastUpdated().toISOString()
+      });
+    }
+  } catch (err) {
+    console.warn('Error fetching sheets in Drive folder', err);
+  }
+  return sheets;
+}
+
+/**
+ * Updates the designated Google Drive folder ID or URL
+ */
+function setDriveFolderId(folderUrlOrId) {
+  if (!folderUrlOrId || typeof folderUrlOrId !== 'string') {
+    return { success: false, error: 'Please provide a valid Google Drive folder URL or ID.' };
+  }
+  let folderId = folderUrlOrId.trim();
+  const match = folderId.match(/\/folders\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) {
+    folderId = match[1];
+  }
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    PropertiesService.getScriptProperties().setProperty('DRIVE_FOLDER_ID', folderId);
+    return {
+      success: true,
+      id: folderId,
+      name: folder.getName(),
+      url: folder.getUrl(),
+      message: 'Connected to Drive folder: ' + folder.getName()
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: 'Could not access the specified Google Drive folder. Please verify permissions. Details: ' + err.message
+    };
+  }
+}
+
 /**
  * Gets or initializes the connected Google Spreadsheet.
- * If not connected or invalid, creates a new spreadsheet and stores its ID in ScriptProperties.
+ * If not connected or invalid, checks the Drive folder or creates a new spreadsheet inside it.
  */
 function getSpreadsheet() {
   const props = PropertiesService.getScriptProperties();
@@ -43,12 +113,39 @@ function getSpreadsheet() {
     }
   }
 
-  // If still not available, create a new spreadsheet automatically
+  // Check designated Google Drive folder for existing sheets
+  const folder = getDriveFolder();
+
+  if (!ss && folder) {
+    try {
+      const folderSheets = getFolderSheets();
+      if (folderSheets.length > 0) {
+        const match = folderSheets.find(s => s.name.toUpperCase().includes('IMS') || s.name.toUpperCase().includes('DATABASE')) || folderSheets[0];
+        ss = SpreadsheetApp.openById(match.id);
+        sheetId = ss.getId();
+        props.setProperty('SPREADSHEET_ID', sheetId);
+      }
+    } catch (e) {
+      console.warn('Could not auto-detect sheet from folder', e);
+    }
+  }
+
+  // If still not available, create a new spreadsheet directly inside the Drive folder
   if (!ss) {
     try {
       ss = SpreadsheetApp.create('DNP HOTELS - IMS Database');
       sheetId = ss.getId();
       props.setProperty('SPREADSHEET_ID', sheetId);
+
+      if (folder) {
+        try {
+          const file = DriveApp.getFileById(sheetId);
+          file.moveTo(folder);
+        } catch (e) {
+          console.warn('Could not move new database into Drive folder', e);
+        }
+      }
+
       initDatabase(ss);
       seedSampleDataIfEmpty(ss);
     } catch (err) {
@@ -56,6 +153,24 @@ function getSpreadsheet() {
       throw new Error('Unable to access or create Google Sheet database: ' + err.message);
     }
   } else {
+    // Ensure spreadsheet is housed in the configured Drive folder
+    if (folder && sheetId) {
+      try {
+        const file = DriveApp.getFileById(sheetId);
+        const parents = file.getParents();
+        let inFolder = false;
+        while (parents.hasNext()) {
+          if (parents.next().getId() === folder.getId()) {
+            inFolder = true;
+            break;
+          }
+        }
+        if (!inFolder) {
+          file.moveTo(folder);
+        }
+      } catch (e) {}
+    }
+
     initDatabase(ss);
   }
 
@@ -310,11 +425,21 @@ function resetOrSeedDemoData() {
 
 function getDatabaseInfo() {
   const ss = getSpreadsheet();
+  const folder = getDriveFolder();
+  const props = PropertiesService.getScriptProperties();
+  const folderId = props.getProperty('DRIVE_FOLDER_ID') || DEFAULT_DRIVE_FOLDER_ID;
+
   return {
     id: ss.getId(),
     name: ss.getName(),
     url: ss.getUrl(),
-    sheetNames: ss.getSheets().map(s => s.getName())
+    sheetNames: ss.getSheets().map(s => s.getName()),
+    folder: {
+      id: folderId,
+      name: folder ? folder.getName() : 'DNP Database Drive Folder',
+      url: folder ? folder.getUrl() : 'https://drive.google.com/drive/folders/' + folderId
+    },
+    folderSheets: getFolderSheets()
   };
 }
 

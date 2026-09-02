@@ -70,8 +70,15 @@
             </select>
           </div>
 
+          <!-- Open Google Drive Database Folder -->
+          <a id="openDriveFolderBtn" href="https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx" target="_blank" title="Open Google Drive Database Folder" class="hidden sm:inline-flex items-center space-x-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold transition">
+            <i class="fa-brands fa-google-drive text-blue-400"></i>
+            <span>Drive Folder</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </a>
+
           <!-- Open Sheet Link Button -->
-          <a id="openSheetBtn" href="#" target="_blank" title="Open Connected Google Sheet Database" class="hidden sm:inline-flex items-center space-x-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold transition">
+          <a id="openSheetBtn" href="#" target="_blank" title="Open Connected Google Sheet Database" class="hidden sm:inline-flex items-center space-x-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold transition">
             <i class="fa-solid fa-file-excel text-emerald-400"></i>
             <span>Google Sheet</span>
             <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
@@ -584,6 +591,67 @@
     <!-- ============================================================== -->
     <div id="tabContent-settings" class="tab-pane hidden space-y-6">
       
+      <!-- Google Drive Database Folder Card -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center">
+              <i class="fa-brands fa-google-drive text-blue-600 mr-2 text-xl"></i>
+              Google Drive Database Folder
+            </h3>
+            <p class="text-xs text-slate-500 mt-1">Designated Google Drive repository for your IMS databases, spreadsheets, and archives.</p>
+          </div>
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <i class="fa-solid fa-folder-open mr-1.5 text-blue-600"></i> Active Drive Repository
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div>
+            <span class="text-slate-400 uppercase font-semibold">Drive Folder:</span>
+            <p id="driveFolderName" class="text-slate-800 font-bold text-sm mt-0.5">DNP Database Folder</p>
+          </div>
+          <div>
+            <span class="text-slate-400 uppercase font-semibold">Folder ID:</span>
+            <p id="driveFolderId" class="text-slate-600 font-mono text-xs mt-0.5 truncate select-all">1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx</p>
+          </div>
+        </div>
+
+        <!-- Spreadsheets Detected in Folder -->
+        <div class="space-y-2 pt-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase text-slate-700">Spreadsheets in this Drive Folder:</span>
+            <button onclick="app.refreshDriveFolderSheets()" class="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center space-x-1">
+              <i id="scanFolderIcon" class="fa-solid fa-rotate text-xs"></i>
+              <span>Scan Folder</span>
+            </button>
+          </div>
+          <div id="driveFolderSheetsList" class="space-y-2">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Custom Drive Folder URL/ID Input -->
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <label class="block text-xs font-bold uppercase text-slate-700">Change / Re-link Drive Folder (URL or ID):</label>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" id="customDriveFolderInput" placeholder="https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx" class="flex-1 px-3.5 py-2 bg-white rounded-lg text-xs border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+            <button onclick="app.connectCustomDriveFolder()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition flex items-center justify-center space-x-1.5">
+              <i class="fa-brands fa-google-drive"></i>
+              <span>Link Folder</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-3 flex flex-wrap items-center gap-3 border-t border-slate-100">
+          <a id="openDriveFolderDirectLink" href="https://drive.google.com/drive/folders/1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx" target="_blank" class="inline-flex items-center space-x-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 px-3 py-1.5 rounded-lg text-xs font-semibold transition">
+            <i class="fa-brands fa-google-drive text-blue-600"></i>
+            <span>Open Google Drive Folder in New Tab</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </a>
+        </div>
+      </div>
+
       <!-- Google Sheet Connection Card -->
       <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">

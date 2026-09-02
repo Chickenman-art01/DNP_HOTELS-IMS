@@ -25,10 +25,13 @@ A full-stack, enterprise-grade Inventory Management System Web App tailored for 
    - **JsBarcode generation**: Printable barcode labels with SKU, item name, and price.
    - **Live Camera Barcode Scanner**: Scan barcodes or QR codes in real-time using mobile or laptop cameras to lookup items or execute transactions.
 
-5. **Flexible Google Sheets Backend**:
-   - **Zero-Config Setup**: Automatically provisions a structured Google Sheet (`Items`, `Transactions`, `Suppliers`, `Departments`, `Locations`, `Settings`) with realistic demo data on first launch.
+5. **Google Drive Database Folder Repository**:
+   - **Dedicated Drive Folder**: Linked directly to your designated Drive folder (`1lkSx36mqaqnF8gfqNswdSPb0zqY4lvOx`).
+   - **Automatic Placement**: All created database spreadsheets, transaction ledgers, and exports are stored and managed inside this folder.
+   - **Multi-Sheet Detection**: The system automatically scans the folder for spreadsheets, allowing one-click switching between different property databases or archive spreadsheets.
+   - **Zero-Config Setup**: Automatically provisions a structured Google Sheet (`Items`, `Transactions`, `Suppliers`, `Departments`, `Locations`, `Settings`) inside your Drive folder on first launch.
    - **Custom Sheet Integration**: Connect your own Google Sheet anytime by pasting its URL or ID in the **Database & Settings** tab.
-   - **Direct Google Sheet Link**: Open and inspect raw tables directly in Google Sheets anytime.
+   - **Direct Google Sheet & Drive Links**: Direct buttons in the header and settings to open both the spreadsheet and the Google Drive folder in a single click.
 
 6. **Vendor & Department Directories**:
    - Comprehensive supplier management with contact details, phone, email, and supplied categories.
