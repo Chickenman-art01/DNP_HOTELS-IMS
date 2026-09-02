@@ -1,24 +1,25 @@
 {
-  "name": "deneb-pollux-hotels---ims",
+  "name": "dnp_hotels-ims",
   "version": "1.0.0",
-  "description": "",
-  "main": "Code.js",
+  "description": "DNP HOTELS Inventory Management System",
+  "main": "Code.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Chickenman-art01/DENEB-POLLUX-HOTELS---IMS.git"
+    "url": "git+https://github.com/Chickenman-art01/DNP_HOTELS-IMS.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/Chickenman-art01/DENEB-POLLUX-HOTELS---IMS/issues"
+    "url": "https://github.com/Chickenman-art01/DNP_HOTELS-IMS/issues"
   },
-  "homepage": "https://github.com/Chickenman-art01/DENEB-POLLUX-HOTELS---IMS#readme",
+  "homepage": "https://github.com/Chickenman-art01/DNP_HOTELS-IMS#readme",
   "devDependencies": {
-    "@types/google-apps-script": "^2.0.12"
+    "@types/google-apps-script": "^2.0.12",
+    "typescript": "^7.0.2"
   }
 }

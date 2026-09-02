@@ -1,6 +1,6 @@
 <script>
 /**
- * DENEB & POLLUX HOTELS - IMS CLIENT APPLICATION LOGIC
+ * DNP HOTELS - IMS CLIENT APPLICATION LOGIC
  */
 
 const app = {
@@ -11,7 +11,7 @@ const app = {
     suppliers: [],
     departments: [],
     locations: [],
-    settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'Deneb & Pollux Hotels' },
+    settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'DNP HOTELS' },
     recentTransactions: [],
     activeTab: 'dashboard',
     propertyFilter: 'ALL',
@@ -113,7 +113,7 @@ const app = {
     this.state.suppliers = data.suppliers || [];
     this.state.departments = data.departments || [];
     this.state.locations = data.locations || [];
-    this.state.settings = data.settings || { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'Deneb & Pollux Hotels' };
+    this.state.settings = data.settings || { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'DNP HOTELS' };
     this.state.recentTransactions = data.recentTransactions || [];
 
     // Update Nav Count
@@ -138,7 +138,7 @@ const app = {
   updateGoogleSheetLinks: function() {
     const sheetUrl = this.state.dbInfo.url || '#';
     const sheetId = this.state.dbInfo.id || '--';
-    const sheetName = this.state.dbInfo.name || 'Deneb & Pollux Hotels Database';
+    const sheetName = this.state.dbInfo.name || 'DNP HOTELS Database';
 
     const headerLink = document.getElementById('openSheetBtn');
     if (headerLink) {
@@ -660,7 +660,7 @@ const app = {
   renderSettingsTab: function() {
     const set = this.state.settings || {};
     const hotelInput = document.getElementById('settingHotelName');
-    if (hotelInput) hotelInput.value = set.HOTEL_NAME || 'Deneb & Pollux Hotels';
+    if (hotelInput) hotelInput.value = set.HOTEL_NAME || 'DNP HOTELS';
 
     const currInput = document.getElementById('settingCurrencySymbol');
     if (currInput) currInput.value = set.CURRENCY_SYMBOL || '₹';
@@ -1398,7 +1398,7 @@ const app = {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Deneb_Pollux_Hotels_Inventory_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `DNP_HOTELS_Inventory_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1432,7 +1432,7 @@ const app = {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Deneb_Pollux_Hotels_Transactions_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `DNP_HOTELS_Transactions_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1442,8 +1442,8 @@ const app = {
   // Fallback Mock data for previewing outside Google Apps Script
   getMockData: function() {
     return {
-      dbInfo: { id: 'mock-sheet-id-deneb-pollux', name: 'Deneb & Pollux Hotels IMS - Mock Data', url: '#' },
-      settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'Deneb & Pollux Hotels' },
+      dbInfo: { id: 'mock-sheet-id-dnp-hotels', name: 'DNP HOTELS IMS - Mock Data', url: '#' },
+      settings: { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'DNP HOTELS' },
       metrics: {
         totalSkus: 15,
         totalValuation: 605330,

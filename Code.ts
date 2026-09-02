@@ -1,5 +1,5 @@
 /**
- * DENEB & POLLUX HOTELS - INVENTORY MANAGEMENT SYSTEM (IMS)
+ * DNP HOTELS - INVENTORY MANAGEMENT SYSTEM (IMS)
  * Google Apps Script Server-Side Backend
  * 
  * Multi-property support: Deneb Hotel, Pollux Hotel, Central Warehouse
@@ -19,7 +19,7 @@
 function doGet(e) {
   const template = HtmlService.createTemplateFromFile('Index');
   return template.evaluate()
-    .setTitle('Deneb & Pollux Hotels | Inventory Management System')
+    .setTitle('DNP HOTELS | Inventory Management System')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -76,7 +76,7 @@ function getSpreadsheet() {
   // If still not available, create a new spreadsheet automatically
   if (!ss) {
     try {
-      ss = SpreadsheetApp.create('DENEB & POLLUX HOTELS - IMS Database');
+      ss = SpreadsheetApp.create('DNP HOTELS - IMS Database');
       sheetId = ss.getId();
       props.setProperty('SPREADSHEET_ID', sheetId);
       initDatabase(ss);
@@ -200,7 +200,7 @@ function initDatabase(ss) {
     setSheet.appendRow(['Key', 'Value', 'Description']);
     formatHeaderRow(setSheet, 3);
     setSheet.appendRow(['CURRENCY_SYMBOL', '₹', 'Display currency symbol']);
-    setSheet.appendRow(['HOTEL_NAME', 'Deneb & Pollux Hotels', 'Organization title']);
+    setSheet.appendRow(['HOTEL_NAME', 'DNP HOTELS', 'Organization title']);
     setSheet.appendRow(['LOW_STOCK_THRESHOLD_DEFAULT', '10', 'Default minimum alert threshold']);
   }
 
@@ -1097,7 +1097,7 @@ function getLocations() {
 
 function getSettingsInternal(ss) {
   const sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
-  if (!sheet) return { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'Deneb & Pollux Hotels' };
+  if (!sheet) return { CURRENCY_SYMBOL: '₹', HOTEL_NAME: 'DNP HOTELS' };
   const data = sheet.getDataRange().getValues();
   const settings = {};
   for (let i = 1; i < data.length; i++) {

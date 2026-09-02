@@ -1,6 +1,6 @@
-# DENEB & POLLUX HOTELS - INVENTORY MANAGEMENT SYSTEM (IMS)
+# DNP_HOTELS-IMS
 
-A full-stack, enterprise-grade Inventory Management System Web App tailored for **Deneb Hotel**, **Pollux Hotel**, and the **Central Distribution Warehouse**, built with **Google Apps Script**, **TypeScript**, and **Google Sheets**.
+A full-stack, enterprise-grade Inventory Management System Web App tailored for **DNP HOTELS** (Deneb Hotel, Pollux Hotel, and the Central Distribution Warehouse), built with **Google Apps Script**, **TypeScript**, and **Google Sheets**.
 
 ---
 
