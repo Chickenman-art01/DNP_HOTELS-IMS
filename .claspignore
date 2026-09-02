@@ -1,9 +1,9 @@
 **/**
 !appsscript.json
-!*.ts
-!*.js
-!*.gs
-!*.html
+!**/*.ts
+!**/*.js
+!**/*.gs
+!**/*.html
 node_modules/**
 package.json
 package-lock.json

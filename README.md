@@ -45,15 +45,25 @@ This project uses `@types/google-apps-script` with `tsconfig.json` so you get fu
 
 ### Project Structure
 ```text
-├── Code.ts            # Server-side TypeScript code (transpiled to GAS)
-├── Index.html         # Main Web App UI layout & modal templates
-├── Styles.html        # Custom styles & barcode label print styling
-├── JavaScript.html    # Client-side reactive logic, Chart.js & scanner
-├── appsscript.json    # Apps Script manifest with web app configuration
-├── .clasp.json        # Clasp project bindings
-├── .claspignore       # Prevents node_modules & local configs from pushing
-├── tsconfig.json      # TypeScript compiler options & type definitions
-└── package.json       # Node package configuration with dev dependencies
+DNP_HOTELS-IMS/
+├── .clasp.json          # Clasp project bindings (rootDir: "src")
+├── .claspignore         # Push filter ignoring dependencies & build configs
+├── .gitignore           # Git ignore for node_modules and local artifacts
+├── package.json         # Dependencies (@types/google-apps-script, typescript)
+├── tsconfig.json        # TypeScript IntelliSense & compiler settings
+├── README.md            # System documentation & developer guide
+└── src/
+    ├── appsscript.json  # Apps Script web app manifest & OAuth scopes
+    ├── server/          # Backend TypeScript Modules (auto-transpiled on push)
+    │   ├── main.ts         # doGet entry point & include template helper
+    │   ├── database.ts     # Google Sheets auto-provisioning, seeding & settings
+    │   ├── items.ts        # Inventory items catalog CRUD & dashboard metrics
+    │   ├── transactions.ts # Atomic Stock In, Stock Out, Transfers & Adjustments
+    │   └── suppliers.ts    # Suppliers, departments & locations management
+    └── client/          # Frontend Web App HTML/CSS/JS Templates
+        ├── Index.html      # Main UI layout, navigation tabs & modals
+        ├── Styles.html     # Styling overrides & printable barcode labels
+        └── JavaScript.html # Reactive client state, Chart.js & camera scanner
 ```
 
 ### Development Commands
